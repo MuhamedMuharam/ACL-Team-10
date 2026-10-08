@@ -1,0 +1,10 @@
+# data stays on Kaggle; never commit the raw CSVs
+*.csv
+*.parquet
+*.zip
+.ipynb_checkpoints/
+__pycache__/
+.DS_Store
+desktop.ini
+.env
+kaggle.json
