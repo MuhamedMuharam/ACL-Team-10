@@ -6,7 +6,7 @@ feature engineering, ML/neural-network models and explainable AI (SHAP, LIME).
 - **Dataset:** [Formula 1 World Championship (1950–2024)](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020) (Kaggle / Ergast), 14 relational CSVs
 - **Target:** `podium = positionOrder <= 3`, one row per (raceId, driverId)
 - **Prediction cutoff:** after qualifying, before the race starts
-- **Kaggle notebook:** _add link_
+- **Kaggle notebook:** [ACL Project – Team 10](https://www.kaggle.com/code/muhamedmuharam/notebook699276446c)
 - **Team:** _names (A data lead, B data-engineering analyst, C feature engineer, D modeling lead)_
 
 ## Repository layout
