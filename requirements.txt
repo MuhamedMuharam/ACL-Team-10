@@ -1,0 +1,12 @@
+# Minimum versions. The saved run used: numpy 2.5.3, pandas 3.0.5, matplotlib 3.11.2, seaborn 0.13.2,
+# scikit-learn 1.9.1, scipy 1.18.1, statsmodels 0.15.0, tensorflow 2.21.0, shap 0.52.0–0.53.0, lime 0.2.0.1 (Python 3.13).
+numpy>=1.26
+pandas>=2.1
+matplotlib>=3.8
+seaborn>=0.13
+scikit-learn>=1.4
+scipy>=1.11
+statsmodels>=0.14
+tensorflow>=2.15
+shap>=0.44
+lime>=0.2

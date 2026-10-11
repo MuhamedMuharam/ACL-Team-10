@@ -1,26 +1,24 @@
-# ACL Project – Team 10: Formula 1 Podium Prediction
+# F1 Podium Prediction — Milestone 1
 
-Predicting Formula 1 podium finishes from pre-race data (1950–2024): data cleaning, EDA, leakage-safe
-feature engineering, ML/neural-network models and explainable AI (SHAP, LIME).
+Predict, for every driver on the starting grid of a Formula 1 race, whether he finishes on the podium (top 3), using only information known after qualifying and before the race starts.
 
-- **Dataset:** [Formula 1 World Championship (1950–2024)](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020) (Kaggle / Ergast), 14 relational CSVs
-- **Target:** `podium = positionOrder <= 3`, one row per (raceId, driverId)
-- **Prediction cutoff:** after qualifying, before the race starts
-- **Kaggle notebook:** [ACL Project – Team 10](https://www.kaggle.com/code/muhamedmuharam/notebook699276446c)
-- **Team:** _names (A data lead, B data-engineering analyst, C feature engineer, D modeling lead)_
+Dataset: [Formula 1 World Championship (1950–2024)](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020) (Kaggle / Ergast), 14 relational tables.
 
-## Repository layout
+## Files
 
-| Path | Contents |
+| file | what it is |
 |---|---|
-| `notebooks/` | development notebooks, one per section (pushed from Kaggle) |
-| `notebooks/ACL_Project_Team10.ipynb` | final run-all notebook (submission) |
-| `report/` | analytical report (PDF) and figures |
-| `DECISIONS.md` | log of every cleaning / feature / modeling decision with its evidence (D1–D30, the IDs used in the notebook) |
+| `F1_Podium_Prediction.ipynb` | the run-all notebook (saved with all outputs): audit, cleaning, EDA, data-engineering questions, features, split, preprocessing experiments, models, ablation, explainability, inference |
+| `DECISIONS.md` | every decision we made (D1–D30), why, and where the evidence is in the notebook |
+| `requirements.txt` | Python packages (minimum versions; the exact versions of the saved run are listed in it and printed in the notebook's first cell) |
+| `outputs/` (created on run) | cleaned tables, modeling table, model comparison, ablation results, all figures |
 
-Development notebooks: `01_audit_cleaning`, `02_de_questions`, `03_features`, `04_models`, `05_xai`.
-Each member pushes only to their own file (Kaggle's GitHub sync overwrites the whole file).
+## How to run
 
-## Reproducing
+**On Kaggle:** create a notebook, add the dataset above as input, upload `F1_Podium_Prediction.ipynb`, turn **Internet on** (Settings → Internet; the first cell installs `lime`, `shap` or `statsmodels` if they are missing and stops with a clear message if it cannot), and press **Run All**. The notebook finds the data under `/kaggle/input/` and writes outputs to `/kaggle/working/`.
 
-Open the Kaggle notebook (dataset attached as input) and click **Run All**. Raw CSVs are never modified.
+**Locally:** put the 14 CSV files in a folder called `data/` next to the notebook, `pip install -r requirements.txt`, then run all cells. Outputs go to `outputs/`.
+
+A full run takes about 10 minutes on a 2-core CPU (most of it in the neural networks, the gradient-boosting grid search and the bootstrap intervals).
+
+The cleaning, the data-engineering answers and the logistic regression (the model used for inference) are deterministic. Random forest and the neural networks can move slightly under other library versions; the notebook reports their spread over random seeds.
