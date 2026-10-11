@@ -16,7 +16,7 @@ feature engineering, ML/neural-network models and explainable AI (SHAP, LIME).
 | `notebooks/` | development notebooks, one per section (pushed from Kaggle) |
 | `notebooks/ACL_Project_Team10.ipynb` | final run-all notebook (submission) |
 | `report/` | analytical report (PDF) and figures |
-| `decisions.md` | log of every cleaning / feature / modeling decision with its evidence |
+| `DECISIONS.md` | log of every cleaning / feature / modeling decision with its evidence (D1–D30, the IDs used in the notebook) |
 
 Development notebooks: `01_audit_cleaning`, `02_de_questions`, `03_features`, `04_models`, `05_xai`.
 Each member pushes only to their own file (Kaggle's GitHub sync overwrites the whole file).
