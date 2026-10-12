@@ -31,19 +31,20 @@ A rule we followed everywhere: **the test seasons (2022–2024) never decide any
 **Alternatives considered.** A catch-all "everything else is mechanical" (our first version) — rejected, because it silently classified 70 labels nobody reviewed, and put rear wings in a different group from front wings.
 **Evidence.** §3.4 prints the full mapping with row counts; Q3 shows the answer with the strict and the broad (+ ambiguous) definition.
 
-### D4 — Duplicate (raceId, driverId) rows: keep the driver's own entry (lowest `resultId`) **[EXP]**
-**Decision.** When a driver has two rows in one race (shared drives, mostly the 1950s), keep the row with the lowest `resultId`.
-**Why.** For every non-Indy pair, the lower `resultId` lies inside the race's normal block of entries (the driver's own car), while the second row was often appended later (co-driver credit). We compared two rules on integrity checks a clean table must pass:
+### D4 — Duplicate (raceId, driverId) rows: keep the car the driver started in (the car only he is recorded in), else the lowest `resultId` **[EXP]**
+**Decision.** When a driver has two rows in one race (shared drives, 1950–1978), keep the car **only he** is recorded in, if exactly one of his cars is like that; otherwise keep the row with the lowest `resultId`.
+**Why.** In a mid-race takeover the driver gets a second row for the team-mate's car, a copy of that car's grid slot and result. That car also lists its original driver, while the car he started in lists only him. When this does not single out one car (team-mates who swapped cars, so both cars list two drivers), the lower `resultId` is the best guess: for every non-Indy pair it lies inside the race's normal block of entries (the driver's own car), while the second row was often appended later (co-driver credit). We compared three rules on integrity checks a clean table must pass:
 
 | rule | races with > 3 podium rows | drivers sharing one car (affected races) |
 |---|---|---|
 | A: keep best `positionOrder` (team's first version) | 15 | 121 |
-| **B: keep own entry (lowest `resultId`)** | **2** | **36** |
+| B: keep own entry (lowest `resultId`) | 2 | 36 |
+| **C: car only he is recorded in, else B** | **1** | **30** |
 
-Both rules remove the same rows (67 outside the Indianapolis 500; 91 in total with it); they differ in which row survives (15 podium labels differ). Rule A credits a shared car's result to both drivers (1957 British GP: Moss *and* Brooks "won").
+All rules remove the same rows (67 outside the Indianapolis 500; 91 in total with it); they differ in which row survives. Rule A credits a shared car's result to both drivers (1957 British GP: Moss *and* Brooks "won"); A and B differ in 15 podium labels. C differs from B in four pairs: Ascari (1951 French GP), González (1954 Belgian GP) and Moss (1961 British GP) took over a team-mate's car after their own failed, and B kept the taken-over car with the team-mate's grid slot and result (Ascari "started 6th and finished 2nd" instead of starting 3rd and retiring); Greene (1962 British GP) started in neither car and is removed by D6 either way. One podium label changes (Ascari's).
 **Alternatives considered.** Keep the row with the **lowest grid slot** (our stage-A notebook), on the idea that the best grid slot is the car the driver started in. Rejected: `grid`, `laps` and the result belong to the **car**, not the driver. In a car swap both drivers have a row in both cars (1957 British GP: Moss and Brooks each have a row in car #18 from grid 1 and in car #20 from grid 3), so "lowest grid" can give a driver his team-mate's car (Brooks 1957).
-**Limitation we accept.** The data does not record which car a driver *started* in, so the kept row is occasionally not his starting car (e.g. Ascari, 1951 French GP); two 1950s races still have four podium rows. All affected rows are before 1965, outside the training window.
-**Evidence.** §3.5 (Moss/Brooks example, resultId-block check, comparison table and plot).
+**Limitation we accept.** Where C falls back to the lowest `resultId` (mostly car swaps), the data does not say which car a driver started in. One 1950s race still has four podium rows (1955 Argentine GP: Farina and Maglioli are both credited with the 3rd-placed car). Official records credit a shared result to both drivers (Ascari's shared 2nd place in 1951); we count the car the driver started in. All affected rows are before 1965, outside the training window.
+**Evidence.** §3.5 (Moss/Brooks example, resultId-block check, comparison table and plot, table of the four pairs where C and B differ).
 
 ### D5 — Exclude the Indianapolis 500 (1950–1960) **[DOMAIN + EDA]**
 **Decision.** Drop races named exactly "Indianapolis 500" (381 rows). The unrelated Indian Grand Prix (2011–2013) stays.
@@ -68,7 +69,7 @@ No effect on the model (trains from 1994).
 **Decision.** `podium = 1` if `positionOrder ≤ 3`; `positionOrder` is excluded from features.
 **Why.** The brief's definition; `positionOrder` is filled for every row (`position` is empty for unclassified drivers).
 **Known limitation.** In a few old races a disqualified driver's position was left vacant (1983 Brazilian GP: 2nd place vacant), so the officially 4th-placed driver has `positionOrder = 3`.
-**Evidence.** §3.7 (1,112 races with exactly 3 podium rows, 2 with 4 — the D4 limitation).
+**Evidence.** §3.7 (1,113 races with exactly 3 podium rows, 1 with 4 — the D4 limitation).
 
 ---
 
@@ -106,8 +107,15 @@ No effect on the model (trains from 1994).
 **Evidence.** §6.4.
 
 ### D13 — Standings come from *before* the race **[DOMAIN]**
-**Decision.** For race N, join the standings published after the **previous race of the same season** via an explicit `raceId → prev_raceId` table; for a season opener use the **previous season's final standings** and set `season_opener = 1`. Features: points as a share of the leader's points, rank, and wins as a share of the races run so far. Entries missing from the previous table get 0 points, no wins and the rank after the last ranked entry. Championship exclusions (Schumacher 1997, McLaren constructors 2007) were decided at or after the end of the season, although the data flags McLaren as excluded in every 2007 table. So in-season tables are used as published (McLaren was leading in mid-2007); only a previous season's **final** table used for an opener applies the exclusion (0 points, never the leader).
-**Why.** The standings row for race N already contains race N's points: leakage (Verstappen, 2023 Belgian GP: 314 points after vs 281 before). An explicit lookup handles drivers who skipped a race. Points systems (8, 9, 10, 25 for a win) and season lengths (7–24 races) changed, so shares and ranks compare across eras where raw points and win counts do not. The opener flag lets the model know a whole-season table is being used.
+**Decision.** For race N, join the standings published after the **previous race of the same season** via an explicit `raceId → prev_raceId` table; for a season opener use the **previous season's final standings**. Features: points as a share of the leader's points, rank, and wins as a share of the races run so far. Entries missing from the previous table get 0 points, no wins and the rank after the last ranked entry. Championship exclusions (Schumacher 1997, McLaren constructors 2007) were decided at or after the end of the season, although the data flags McLaren as excluded in every 2007 table. So in-season tables are used as published (McLaren was leading in mid-2007); only a previous season's **final** table used for an opener applies the exclusion (0 points, never the leader).
+**Why.** The standings row for race N already contains race N's points: leakage (Verstappen, 2023 Belgian GP: 314 points after vs 281 before). An explicit lookup handles drivers who skipped a race. Points systems (8, 9, 10, 25 for a win) and season lengths (7–24 races) changed, so shares and ranks compare across eras where raw points and win counts do not.
+**Why there is no `season_opener` feature.** At an opener the six standings features come from a whole-season table rather than from a few races, so we first gave the model a flag `season_opener` to tell the two cases apart. We removed it, because it cannot help a podium prediction:
+* **It carries no signal by itself.** Every race has exactly three podiums, opener or not, so knowing that a race is the first of the season does not change anyone's chance (its standalone AUC was 0.500).
+* **The standings mean the same thing in both cases.** Whether they come from last season's final table or from this season's table, they describe how strong the driver and the team are. If anything the full-season table is the more reliable summary, so the model has no reason to read them differently.
+* **Our inference model could not use it anyway.** A logistic regression can only add the same constant to every opener's log-odds; it cannot use the flag to re-weight the standings features unless an explicit interaction is built.
+* **There is little to learn from.** Openers are about 1 race in 20 (about 26 of the 470 training races), too few for a flexible model to learn a reliable opener-specific pattern; a tree model could instead split on the flag by chance and overfit.
+* **It describes our pipeline, not the race.** The flag records *where a feature value came from*, not anything about the driver, the car or the race. Such bookkeeping belongs in the code (it still decides which table is joined), not in the model's inputs, where it only adds an extra column to explain.
+* **The measurement agreed.** With the flag in the model, removing it changed validation PR-AUC by +0.0001 (95% interval −0.001 to +0.002) and its permutation importance was 0.0001.
 **Evidence.** §6.4: the Verstappen check and an assertion that every `prev_raceId` is strictly earlier.
 
 ### D14 — Form = rolling windows over past races **[EDA + DOMAIN]**
@@ -119,18 +127,18 @@ No effect on the model (trains from 1994).
 ### D15 — Qualifying features **[DOMAIN, tested in §8.4]**
 **Decision.** `quali_position`; `quali_gap_pct` = the driver's **Q1** lap vs the fastest Q1 lap of that race, in % (laps more than 20% off are not a real attempt and become missing: 10 of 10,338); `grid_penalty` = grid slot − reference slot, where the reference is the qualifying position, or the **sprint result** on 2021–22 sprint weekends. Missing qualifying stays NaN in the table; the pipeline imputes it with a missing indicator (D19). Raw lap times are not features.
 **Why.** Raw lap times depend on the circuit length (Monaco ~70 s vs Spa ~105 s). Q1 is the only session every driver ran; "best lap of any session" mixed track conditions and, in 2006–08, race-fuel Q3 laps. Q1 showed penalised front-row qualifiers podium far less often (28% vs 73%), so the penalty is its own feature; measuring it against the sprint result stops sprint overtakes from looking like penalties.
-**Empirical check (§8.4).** Raw lap times scored slightly *higher* on validation (LR 0.725 vs 0.723; GBM 0.688 vs 0.682), but the bootstrap intervals of the difference include 0. We kept the gap for transferability to circuits not seen in training, and report the trial as it came out.
+**Empirical check (§8.4).** Raw lap times scored slightly *higher* on validation for logistic regression (0.7255 vs 0.7233) and slightly *lower* for gradient boosting (0.6850 vs 0.6861); the bootstrap intervals of both differences include 0. We kept the gap for transferability to circuits not seen in training, and report the trial as it came out.
 **Evidence.** §6.3 (gap distribution and cutoff), §6.7, §8.4.
 
 ### D16 — Five feature groups **[EDA]**
-**Decision.** grid (3), qualifying (3), standings (7), form (5), context (4) = 22 features.
+**Decision.** grid (3), qualifying (3), standings (6), form (5), context (4) = 21 features. (A seventh standings column, `season_opener`, was removed; see D13.)
 **Why.** Each group answers a different question (where does he start? how fast was he? how strong is the car/driver this season? recently? anything else?), and the ablation needs named groups.
 **Evidence before training** (§6.7, training window 1994–2019): starting position 0.905 standalone AUC; most standings and form features 0.85–0.88, constructor versions mostly at or above the driver versions (rank is the exception); win shares 0.75–0.82; context, flags and `con_mech_rate_last10` 0.50–0.69.
 **Evidence after training** (§10): only "grid group only" loses clearly (−0.06 to −0.10); single groups substitute for each other; grid is irreplaceable on test.
 
 ### D17 — Training window 1994–2019 **[DOMAIN, checked by EXP]**
 **Decision.** Train on seasons 1994–2019 only.
-**Why.** 1994 is the first season with qualifying data, and the sport before it differs strongly (bigger fields, frequent breakdowns, weaker grid effect, §4). The empirical check (§8.5) on three validation periods finds no consistent winner: 1994 is best for 2016–17 and 1980 for 2018–19 and 2020–21, with 1994 within about 0.003 of the best in the other two; 2003 is worst in all three. Differences between 1950, 1980 and 1994 are within noise, so the choice rests on the domain argument.
+**Why.** 1994 is the first season with qualifying data, and the sport before it differs strongly (bigger fields, frequent breakdowns, weaker grid effect, §4). The empirical check (§8.5) on three validation periods finds no consistent winner: 1980 is best for 2016–17 and 2018–19 and 1950 for 2020–21, with 1994 within about 0.001 of the best in the first two periods and 0.014 behind in 2020–21, where the lead comes from gradient boosting alone (differences within the noise of a 39-race validation set); 2003 is worst in all three. Differences between 1950, 1980 and 1994 are within noise, so the choice rests on the domain argument.
 **Note.** Our first version chose the window from one validation period and one gradient-boosting run; a reviewer showed that result flipped with the random seed (because of scikit-learn's automatic early stopping on a random 10% split). Early stopping is now off (D28) and the check uses three periods.
 **Evidence.** §6 (constants), §8.5 table and plot.
 
@@ -148,12 +156,12 @@ No effect on the model (trains from 1994).
 **Why.** Missing values are structural, so an indicator lets the model learn from "missing". The median is robust to skew. Linear models and networks need comparable scales; trees do not.
 **Experiments (§8.1–8.3).**
 * **E1, split → fit vs fit → split:** scores practically identical, but medians and means shift when future seasons are included (e.g. `experience` median 62 → 71), so the second order uses information unavailable in 2019. Correct order kept.
-* **E2, impute → scale vs scale → impute, for LR and the NN:** visibly different `quali_gap_pct` distribution; LR validation PR-AUC moves by < 0.001; the NN by < 0.001 on validation and 0.008 on test, in favour of our order. Standard order kept.
+* **E2, impute → scale vs scale → impute, for LR and the NN:** visibly different `quali_gap_pct` distribution; LR validation PR-AUC moves by < 0.001; the NN by about 0.004 on validation and 0.008 on test, in favour of scale → impute, but less than the NN's own seed spread. Standard order kept.
 * **E3, derive → impute vs impute → derive:** imputing first invents 1,808 penalty values; validation PR-AUC +0.002 (noise), ROC-AUC and log-loss worse. Derive first.
 **Evidence.** §8 (effect table and plot), §8.1–8.3.
 
 ### D20 — Class weights decided on validation **[EXP]**
-**Decision.** Logistic regression: **unweighted** (validation PR-AUC 0.723 vs 0.720 weighted; Brier 0.067 vs 0.113). Random forest: weighted (`balanced_subsample`), chosen together with leaf size on validation, but the weighted and unweighted forests are within 0.001 of each other, so that part is noise. Gradient boosting and networks: unweighted.
+**Decision.** Logistic regression: **unweighted** (validation PR-AUC 0.723 vs 0.719 weighted; Brier 0.067 vs 0.114). Random forest: weighted (`balanced_subsample`), chosen together with leaf size on validation, but the best weighted and unweighted forests are only 0.002 apart, inside the forest's seed spread, so that part is noise. Gradient boosting and networks: unweighted.
 **Why.** Weights make the rare class count more but inflate every probability (calibration plot, §9.4). We keep them only where they improve validation PR-AUC. (Our first version justified weights with test results; that was removed.)
 **Evidence.** §9 (models 1a/1b), §9.1 (forest grid), §9.4 (Brier, calibration).
 
@@ -178,7 +186,7 @@ No effect on the model (trains from 1994).
 
 ### D24 — Model selection: best on validation, but only if it beats the baseline significantly **[EXP]**
 **Decision.** Rank candidates by validation PR-AUC (mean over seeds for the forest and the networks). Use the best one only if the paired bootstrap interval of *best − baseline* lies entirely above 0; otherwise use the baseline.
-**Result.** Best on validation: tuned gradient boosting 0.736 (random forest 0.731, seed mean); baseline unweighted logistic regression 0.723; difference interval −0.022 to +0.043 → **the logistic regression is used for inference and explanations.** On test: LR 0.709, RF 0.713, GBM 0.712 — all within each other's intervals.
+**Result.** Best on validation: tuned gradient boosting 0.736 (random forest 0.734, seed mean); baseline unweighted logistic regression 0.723; difference interval −0.022 to +0.043 → **the logistic regression is used for inference and explanations.** On test: LR 0.709, RF 0.712, GBM 0.712 — all within each other's intervals.
 **Why.** The brief asks to justify complex models against the baseline. Our first version picked the random forest because it was 0.0004 ahead, a margin that flipped with the random seed. The rule makes the choice robust and follows "complexity must earn its place". A bonus: logistic regression is deterministic and well calibrated, so its results do not change between environments.
 **Evidence.** §9.4.
 
@@ -189,7 +197,7 @@ No effect on the model (trains from 1994).
 
 ### D26 — Explain the inference model on the test seasons; cross-check with a tree model **[DOMAIN]**
 **Decision.** Permutation importance (per feature and per group) and SHAP (exact LinearExplainer) for the logistic regression; mean-|SHAP| cross-check for tuned gradient boosting; local SHAP waterfall + LIME (5 seeds) for Verstappen, 2023 Belgian GP; SHAP for the most confident wrong prediction. Computed on 2022–2024.
-**Why.** We explain the model whose predictions a user sees. Explaining chooses nothing, so the test set can be used. LIME's poor local fit here (R² ≈ 0.3, local prediction 0.27–0.29 vs model 0.81) is reported, which is why SHAP is the main local explanation. Explanations describe what the model relies on, **not causes**.
+**Why.** We explain the model whose predictions a user sees. Explaining chooses nothing, so the test set can be used. LIME's poor local fit here (R² ≈ 0.3, local prediction 0.25–0.28 vs model 0.81) is reported, which is why SHAP is the main local explanation. Explanations describe what the model relies on, **not causes**.
 **Evidence.** §11.
 
 ### D27 — Inference function **[DOMAIN]**
@@ -204,11 +212,11 @@ No effect on the model (trains from 1994).
 
 ### D29 — Random forest and logistic-regression settings **[EXP / DOMAIN]**
 **Decision.** Random forest: 400 trees, `max_features="sqrt"`, `min_samples_leaf` and class weights chosen on validation from 5 × 2 options → 50 and `balanced_subsample`; the training score reported is the out-of-bag estimate. Logistic regression: scikit-learn default L2 strength (C = 1).
-**Why.** Leaf size controls memorisation; small leaves (5) score clearly worse on validation (0.686–0.714) than 50 (0.730–0.731). The in-sample training score of a forest is misleading, the out-of-bag score is honest. With ~10,000 rows and 30 columns the default L2 penalty is mild and the baseline needs no tuning to make the point.
+**Why.** Leaf size controls memorisation; small leaves (5) score worse on validation (0.703–0.707) than 50 (0.728–0.732). The in-sample training score of a forest is misleading, the out-of-bag score is honest. With ~10,000 rows and 29 columns the default L2 penalty is mild and the baseline needs no tuning to make the point.
 **Evidence.** §9.1.
 
 ### D30 — Ablation rule: remove a group or feature only if that significantly improves validation **[EXP]**
 **Decision.** After the ablation, a group or single feature is removed from the inference model only if removing it raises validation PR-AUC with a 95% interval entirely above 0.
-**Result.** No group or feature qualifies, so all 22 features stay. Removing `experience` alone even hurts significantly (−0.008), while removing the whole context group does not (age and experience carry opposite-signed weights that cancel). Form and context show no measurable contribution as groups, which we report.
+**Result.** No group or feature qualifies, so all 21 features stay. Removing `experience` alone even hurts significantly (−0.008), while removing the whole context group does not (age and experience carry opposite-signed weights that cancel). Form and context show no measurable contribution as groups, which we report.
 **Why.** Decisions are taken on validation only (our first version kept form because of a *test* number; that was removed). With 39 validation races, a rule with an interval prevents reacting to noise.
 **Evidence.** §10.
