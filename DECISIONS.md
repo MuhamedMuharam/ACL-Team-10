@@ -152,18 +152,18 @@ No effect on the model (trains from 1994).
 **Evidence.** §7 split summary (train 10,156 rows / 470 races, podium rate 13.9%; validation 780 / 39 and test 1,359 / 68, both 15.0%).
 
 ### D19 — Median imputation + missing indicators; scaling for LR/NN; split first, derive before impute **[EXP + DOMAIN]**
-**Decision.** `SimpleImputer(median, add_indicator=True)`; `StandardScaler` for logistic regression and the networks; order impute → scale; all fitted on the training set inside a `Pipeline`; derived features (`grid_penalty`) computed from real values before imputation.
-**Why.** Missing values are structural, so an indicator lets the model learn from "missing". The median is robust to skew. Linear models and networks need comparable scales; trees do not.
+**Decision.** `SimpleImputer(median, add_indicator=True)`; `StandardScaler` for logistic regression and the network; order impute → scale; all fitted on the training set inside a `Pipeline`; derived features (`grid_penalty`) computed from real values before imputation.
+**Why.** Missing values are structural, so an indicator lets the model learn from "missing". The median is robust to skew. Linear models and neural networks need comparable scales; trees do not.
 **Experiments (§8.1–8.3).**
 * **E1, split → fit vs fit → split:** scores practically identical, but medians and means shift when future seasons are included (e.g. `experience` median 62 → 71), so the second order uses information unavailable in 2019. Correct order kept.
-* **E2, impute → scale vs scale → impute, for LR and the NN:** visibly different `quali_gap_pct` distribution; LR validation PR-AUC moves by < 0.001; the NN by about 0.004 on validation and 0.008 on test, in favour of scale → impute, but less than the NN's own seed spread. Standard order kept.
+* **E2, impute → scale vs scale → impute, for LR and the NN (32 → 16):** visibly different `quali_gap_pct` distribution; LR validation PR-AUC moves by < 0.001 (0.7233 vs 0.7230); for the NN impute → scale is higher (validation 0.7290 vs 0.7204, test 0.7054 vs 0.6943), a single run per order. Impute → scale kept: the standard order, and the model sees exactly mean 0 / std 1.
 * **E3, derive → impute vs impute → derive:** imputing first invents 1,808 penalty values; validation PR-AUC +0.002 (noise), ROC-AUC and log-loss worse. Derive first.
 **Evidence.** §8 (effect table and plot), §8.1–8.3.
 
-### D20 — Class weights decided on validation **[EXP]**
-**Decision.** Logistic regression: **unweighted** (validation PR-AUC 0.723 vs 0.719 weighted; Brier 0.067 vs 0.114). Random forest: weighted (`balanced_subsample`), chosen together with leaf size on validation, but the best weighted and unweighted forests are only 0.002 apart, inside the forest's seed spread, so that part is noise. Gradient boosting and networks: unweighted.
-**Why.** Weights make the rare class count more but inflate every probability (calibration plot, §9.4). We keep them only where they improve validation PR-AUC. (Our first version justified weights with test results; that was removed.)
-**Evidence.** §9 (models 1a/1b), §9.1 (forest grid), §9.4 (Brier, calibration).
+### D20 — Class weights: unweighted except the random forest **[DOMAIN + EXP]**
+**Decision.** Logistic regression, gradient boosting and the network: **unweighted**. Random forest: weighted (`balanced_subsample`), chosen together with leaf size on validation, but the best weighted and unweighted forests are only 0.002 apart, inside the forest's seed spread, so that part is noise.
+**Why.** Weights make the rare class count more but inflate every probability, and the inference function returns a probability. The calibration plot (§9.4) shows it: the weighted forest predicts far above the real podium rates (validation Brier 0.106), the unweighted logistic regression lies close to the diagonal (Brier 0.067). (Our first version justified weights with test results; that was removed.)
+**Evidence.** §9 (D20 callout), §9.1 (forest grid), §9.4 (Brier, calibration).
 
 ### D21 — Metrics **[DOMAIN]**
 **Decision.** ROC-AUC, PR-AUC, F1, precision, recall ("five metrics"), plus Brier score and log-loss (calibration), race top-3 hit rate and predicted podiums per race, on train, validation and test. Primary: PR-AUC. Secondary: ROC-AUC.
@@ -185,15 +185,15 @@ No effect on the model (trains from 1994).
 ## Modeling
 
 ### D24 — Model selection: best on validation, but only if it beats the baseline significantly **[EXP]**
-**Decision.** Rank candidates by validation PR-AUC (mean over seeds for the forest and the networks). Use the best one only if the paired bootstrap interval of *best − baseline* lies entirely above 0; otherwise use the baseline.
-**Result.** Best on validation: tuned gradient boosting 0.736 (random forest 0.734, seed mean); baseline unweighted logistic regression 0.723; difference interval −0.022 to +0.043 → **the logistic regression is used for inference and explanations.** On test: LR 0.709, RF 0.712, GBM 0.712 — all within each other's intervals.
+**Decision.** Rank candidates by validation PR-AUC (mean over seeds for the forest and the network). Use the best one only if the paired bootstrap interval of *best − baseline* lies entirely above 0; otherwise use the baseline.
+**Result.** Best on validation: tuned gradient boosting 0.736 (random forest 0.734, seed mean); baseline logistic regression 0.723; difference interval −0.022 to +0.043 → **the logistic regression is used for inference and explanations.** On test: LR 0.709, RF 0.712, GBM 0.712 — all within each other's intervals.
 **Why.** The brief asks to justify complex models against the baseline. Our first version picked the random forest because it was 0.0004 ahead, a margin that flipped with the random seed. The rule makes the choice robust and follows "complexity must earn its place". A bonus: logistic regression is deterministic and well calibrated, so its results do not change between environments.
 **Evidence.** §9.4.
 
-### D25 — Shallow networks: 1 or 2 ReLU hidden layers, dropout, L2, early stopping, 3 seeds **[EXP]**
-**Decision.** Two variants: 16 units; 32 → 16 units. Dropout 0.2, L2 1e-4, Adam (lr 0.001), batch 128, unweighted, early stopping on validation PR-AUC (patience 15, best weights restored). Each trained with 3 seeds.
-**Why.** The brief asks for 1–2 hidden layers. Dropout, L2 and early stopping limit overfitting on ~10,000 rows. Seeds show how much a network moves from its random start (up to about ±0.01), more than the depth difference.
-**Evidence.** §9.3 (learning curves, seed table).
+### D25 — Shallow neural network: 2 hidden layers (32 → 16), built with Keras **[EXP]**
+**Decision.** Input: the 29 imputed and scaled columns → Dense 32 ReLU → Dense 16 ReLU → 1 sigmoid output (the podium probability). Each hidden layer has dropout 20% and an L2 penalty of 1e-4. Loss: binary cross-entropy, unweighted (D20). Optimiser: Adam, learning rate 0.001, batches of 128. Training stops when validation PR-AUC has not improved for 15 epochs, and the best epoch's weights are kept. Trained 3 times (seeds 42, 1, 2); the seed-42 network is the one reported.
+**Why.** The brief asks for a shallow network (roughly 1–2 hidden layers) and allows a standard library such as Keras. Two small layers give only 1,505 weights, small compared with ~10,000 training rows. Dropout (switching off 20% of the units at random while training), L2 (large weights cost extra) and early stopping all limit overfitting. The 3 seeds show how much the result depends on the random starting weights: validation PR-AUC 0.726–0.729.
+**Evidence.** §9.3 (model summary, learning curves, seed table).
 
 ### D26 — Explain the inference model on the test seasons; cross-check with a tree model **[DOMAIN]**
 **Decision.** Permutation importance (per feature and per group) and SHAP (exact LinearExplainer) for the logistic regression; mean-|SHAP| cross-check for tuned gradient boosting; local SHAP waterfall + LIME (5 seeds) for Verstappen, 2023 Belgian GP; SHAP for the most confident wrong prediction. Computed on 2022–2024.
@@ -213,6 +213,12 @@ No effect on the model (trains from 1994).
 ### D29 — Random forest and logistic-regression settings **[EXP / DOMAIN]**
 **Decision.** Random forest: 400 trees, `max_features="sqrt"`, `min_samples_leaf` and class weights chosen on validation from 5 × 2 options → 50 and `balanced_subsample`; the training score reported is the out-of-bag estimate. Logistic regression: scikit-learn default L2 strength (C = 1).
 **Why.** Leaf size controls memorisation; small leaves (5) score worse on validation (0.703–0.707) than 50 (0.728–0.732). The in-sample training score of a forest is misleading, the out-of-bag score is honest. With ~10,000 rows and 29 columns the default L2 penalty is mild and the baseline needs no tuning to make the point.
+**What the settings mean.**
+* `n_estimators = 400`: the number of decision trees in the forest. The forest's probability is the average of the 400 trees.
+* `min_samples_leaf`: the smallest number of training rows a leaf (an end point of a tree) may hold; a split that would leave fewer rows on either side is not made. The leaf predicts the share of podiums among its rows. Small leaves (5) hold a handful of rows, often from the same few races, so the tree memorises noise; large leaves (100) average many rows, so predictions are smoother but less detailed. 50 was best on validation.
+* `max_features = "sqrt"`: at every split a tree may only look at a random subset of the columns, of size √(number of columns). The forest sees 29 columns (21 features + 8 missing indicators), so each split chooses among 5 random columns. This makes the trees different from each other (otherwise every tree would split on `grid_pos` first), and averaging different trees is what reduces the variance.
+* `class_weight = "balanced_subsample"`: podium rows count more in each tree's training sample, so that both classes weigh the same (see D20).
+* `C` (logistic regression): the inverse of the penalty strength, C = 1 / λ. The model minimises log-loss plus an L2 penalty that pulls the weights toward 0. A small C (e.g. 0.01) means a strong penalty, small weights and a simpler model; a large C (e.g. 100) means almost no penalty, so the weights fit the training data freely. C = 1 is scikit-learn's default.
 **Evidence.** §9.1.
 
 ### D30 — Ablation rule: remove a group or feature only if that significantly improves validation **[EXP]**
