@@ -110,12 +110,12 @@ No effect on the model (trains from 1994).
 **Decision.** For race N, join the standings published after the **previous race of the same season** via an explicit `raceId → prev_raceId` table; for a season opener use the **previous season's final standings**. Features: points as a share of the leader's points, rank, and wins as a share of the races run so far. Entries missing from the previous table get 0 points, no wins and the rank after the last ranked entry. Championship exclusions (Schumacher 1997, McLaren constructors 2007) were decided at or after the end of the season, although the data flags McLaren as excluded in every 2007 table. So in-season tables are used as published (McLaren was leading in mid-2007); only a previous season's **final** table used for an opener applies the exclusion (0 points, never the leader).
 **Why.** The standings row for race N already contains race N's points: leakage (Verstappen, 2023 Belgian GP: 314 points after vs 281 before). An explicit lookup handles drivers who skipped a race. Points systems (8, 9, 10, 25 for a win) and season lengths (7–24 races) changed, so shares and ranks compare across eras where raw points and win counts do not.
 **Why there is no `season_opener` feature.** At an opener the six standings features come from a whole-season table rather than from a few races, so we first gave the model a flag `season_opener` to tell the two cases apart. We removed it, because it cannot help a podium prediction:
-* **It carries no signal by itself.** Every race has exactly three podiums, opener or not, so knowing that a race is the first of the season does not change anyone's chance (its standalone AUC was 0.500).
+* **It carries no signal by itself.** Every race has exactly three podiums, opener or not, so knowing that a race is the first of the season does not change anyone's chance (in an earlier version of the notebook its standalone AUC was 0.500).
 * **The standings mean the same thing in both cases.** Whether they come from last season's final table or from this season's table, they describe how strong the driver and the team are. If anything the full-season table is the more reliable summary, so the model has no reason to read them differently.
 * **Our inference model could not use it anyway.** A logistic regression can only add the same constant to every opener's log-odds; it cannot use the flag to re-weight the standings features unless an explicit interaction is built.
 * **There is little to learn from.** Openers are about 1 race in 20 (about 26 of the 470 training races), too few for a flexible model to learn a reliable opener-specific pattern; a tree model could instead split on the flag by chance and overfit.
 * **It describes our pipeline, not the race.** The flag records *where a feature value came from*, not anything about the driver, the car or the race. Such bookkeeping belongs in the code (it still decides which table is joined), not in the model's inputs, where it only adds an extra column to explain.
-* **The measurement agreed.** With the flag in the model, removing it changed validation PR-AUC by +0.0001 (95% interval −0.001 to +0.002) and its permutation importance was 0.0001.
+* **The measurement agreed.** It was measured in an earlier version of the notebook: with the flag in the model, removing it changed validation PR-AUC by +0.0001 (95% interval −0.001 to +0.002) and its permutation importance was 0.0001. The flag was then removed, so no cell of the current notebook reruns this test; the reasons above stand on their own.
 **Evidence.** §6.4: the Verstappen check and an assertion that every `prev_raceId` is strictly earlier.
 
 ### D14 — Form = rolling windows over past races **[EDA + DOMAIN]**
@@ -124,11 +124,10 @@ No effect on the model (trains from 1994).
 **Result after training.** The ablation (§10) finds no measurable contribution of form once standings are present; it is kept because removing it does not improve validation either (D30).
 **Evidence.** §6.5: a hand-recomputed value matches the feature (assertion).
 
-### D15 — Qualifying features **[DOMAIN, tested in §8.4]**
+### D15 — Qualifying features **[DOMAIN]**
 **Decision.** `quali_position`; `quali_gap_pct` = the driver's **Q1** lap vs the fastest Q1 lap of that race, in % (laps more than 20% off are not a real attempt and become missing: 10 of 10,338); `grid_penalty` = grid slot − reference slot, where the reference is the qualifying position, or the **sprint result** on 2021–22 sprint weekends. Missing qualifying stays NaN in the table; the pipeline imputes it with a missing indicator (D19). Raw lap times are not features.
-**Why.** Raw lap times depend on the circuit length (Monaco ~70 s vs Spa ~105 s). Q1 is the only session every driver ran; "best lap of any session" mixed track conditions and, in 2006–08, race-fuel Q3 laps. Q1 showed penalised front-row qualifiers podium far less often (28% vs 73%), so the penalty is its own feature; measuring it against the sprint result stops sprint overtakes from looking like penalties.
-**Empirical check (§8.4).** Raw lap times scored slightly *higher* on validation for logistic regression (0.7255 vs 0.7233) and slightly *lower* for gradient boosting (0.6850 vs 0.6861); the bootstrap intervals of both differences include 0. We kept the gap for transferability to circuits not seen in training, and report the trial as it came out.
-**Evidence.** §6.3 (gap distribution and cutoff), §6.7, §8.4.
+**Why.** Raw lap times depend on the circuit length (Monaco ~70 s vs Spa ~105 s). Q1 is the only session every driver ran; "best lap of any session" mixed track conditions and, in 2006–09, race-fuel Q3 laps. Q1 showed penalised front-row qualifiers podium far less often (28% vs 73%), so the penalty is its own feature; measuring it against the sprint result stops sprint overtakes from looking like penalties.
+**Evidence.** §6.3 (gap distribution and cutoff), §6.7.
 
 ### D16 — Five feature groups **[EDA]**
 **Decision.** grid (3), qualifying (3), standings (6), form (5), context (4) = 21 features. (A seventh standings column, `season_opener`, was removed; see D13.)
@@ -138,9 +137,9 @@ No effect on the model (trains from 1994).
 
 ### D17 — Training window 1994–2019 **[DOMAIN, checked by EXP]**
 **Decision.** Train on seasons 1994–2019 only.
-**Why.** 1994 is the first season with qualifying data, and the sport before it differs strongly (bigger fields, frequent breakdowns, weaker grid effect, §4). The empirical check (§8.5) on three validation periods finds no consistent winner: 1980 is best for 2016–17 and 2018–19 and 1950 for 2020–21, with 1994 within about 0.001 of the best in the first two periods and 0.014 behind in 2020–21, where the lead comes from gradient boosting alone (differences within the noise of a 39-race validation set); 2003 is worst in all three. Differences between 1950, 1980 and 1994 are within noise, so the choice rests on the domain argument.
+**Why.** 1994 is the first season with qualifying data, and the sport before it differs strongly (bigger fields, frequent breakdowns, weaker grid effect, §4). The empirical check (§8.4) on three validation periods finds no consistent winner: 1980 is best for 2016–17 and 2018–19 and 1950 for 2020–21, with 1994 within about 0.001 of the best in the first two periods and 0.014 behind in 2020–21, where the lead comes from gradient boosting alone (differences within the noise of a 39-race validation set); 2003 is worst in all three. Differences between 1950, 1980 and 1994 are within noise, so the choice rests on the domain argument.
 **Note.** Our first version chose the window from one validation period and one gradient-boosting run; a reviewer showed that result flipped with the random seed (because of scikit-learn's automatic early stopping on a random 10% split). Early stopping is now off (D28) and the check uses three periods.
-**Evidence.** §6 (constants), §8.5 table and plot.
+**Evidence.** §6 (constants), §8.4 table and plot.
 
 ---
 
@@ -156,18 +155,18 @@ No effect on the model (trains from 1994).
 **Why.** Missing values are structural, so an indicator lets the model learn from "missing". The median is robust to skew. Linear models and neural networks need comparable scales; trees do not.
 **Experiments (§8.1–8.3).**
 * **E1, split → fit vs fit → split:** scores practically identical, but medians and means shift when future seasons are included (e.g. `experience` median 62 → 71), so the second order uses information unavailable in 2019. Correct order kept.
-* **E2, impute → scale vs scale → impute, for LR and the NN (32 → 16):** visibly different `quali_gap_pct` distribution; LR validation PR-AUC moves by < 0.001 (0.7233 vs 0.7230); for the NN impute → scale is higher (validation 0.7290 vs 0.7204, test 0.7054 vs 0.6943), a single run per order. Impute → scale kept: the standard order, and the model sees exactly mean 0 / std 1.
+* **E2, impute → scale vs scale → impute, for LR and the NN (32 → 16):** visibly different `quali_gap_pct` distribution; LR validation PR-AUC moves by < 0.001 (0.7233 vs 0.7230); for the NN impute → scale is higher on validation (0.7290 vs 0.7204; test, for reference only: 0.7054 vs 0.6943), a single run per order. Impute → scale kept: the standard order, and the model sees exactly mean 0 / std 1.
 * **E3, derive → impute vs impute → derive:** imputing first invents 1,808 penalty values; validation PR-AUC +0.002 (noise), ROC-AUC and log-loss worse. Derive first.
 **Evidence.** §8 (effect table and plot), §8.1–8.3.
 
 ### D20 — Class weights: unweighted except the random forest **[DOMAIN + EXP]**
 **Decision.** Logistic regression, gradient boosting and the network: **unweighted**. Random forest: weighted (`balanced_subsample`), chosen together with leaf size on validation, but the best weighted and unweighted forests are only 0.002 apart, inside the forest's seed spread, so that part is noise.
-**Why.** Weights make the rare class count more but inflate every probability, and the inference function returns a probability. The calibration plot (§9.4) shows it: the weighted forest predicts far above the real podium rates (validation Brier 0.106), the unweighted logistic regression lies close to the diagonal (Brier 0.067). (Our first version justified weights with test results; that was removed.)
-**Evidence.** §9 (D20 callout), §9.1 (forest grid), §9.4 (Brier, calibration).
+**Why.** Weights make the rare class count more but inflate every probability, and the inference function returns a probability. The validation Brier scores (§9.4) show it: 0.106 for the weighted forest against 0.067 for the unweighted logistic regression (lower is better). The calibration plot in §9.4, drawn on test for reference only, shows the same: the weighted forest predicts far above the real podium rates, the logistic regression lies close to the diagonal. (Our first version justified weights with test results; that was removed.)
+**Evidence.** §9 (D20 callout), §9.1 (forest grid), §9.4 (validation Brier; the calibration plot is on test, for reference only).
 
 ### D21 — Metrics **[DOMAIN]**
 **Decision.** ROC-AUC, PR-AUC, F1, precision, recall ("five metrics"), plus Brier score and log-loss (calibration), race top-3 hit rate and predicted podiums per race, on train, validation and test. Primary: PR-AUC. Secondary: ROC-AUC.
-**Why.** Podiums are rare; PR-AUC focuses on the top of the ranking and its random level is the base rate (0.15) rather than 0.5. ROC-AUC shows overall separation. The inference function returns a probability, so calibration is checked too.
+**Why.** Podiums are rare; PR-AUC focuses on the top of the ranking and its random level is the base rate (0.15) rather than 0.5. ROC-AUC shows overall separation. The inference function returns a probability, so calibration is checked too. The model tables in §9.4 show the Brier score; log-loss is computed for every model and saved in `model_comparison.csv` in the output folder, and the §8 experiment tables show it.
 **Evidence.** §7.1, §9.4.
 
 ### D22 — Threshold = maximum F1 on validation **[DOMAIN]**
@@ -178,22 +177,22 @@ No effect on the model (trains from 1994).
 ### D23 — Uncertainty: race-level bootstrap **[DOMAIN]**
 **Decision.** Every important comparison gets a 95% interval from 1,000 resamples of the races of a split (paired: both models scored on the same resampled races).
 **Why.** Validation has 39 races; a difference of 0.01 PR-AUC can be luck. Resampling races (not rows) respects that rows from one race are not independent.
-**Evidence.** §7.1 (`race_bootstrap`), used in §8.4, §9.4, §10.
+**Evidence.** §7.1 (`race_bootstrap`), used in §9.4 and §10.
 
 ---
 
 ## Modeling
 
-### D24 — Model selection: best on validation, but only if it beats the baseline significantly **[EXP]**
+### D24 — Model selection: best on validation, but only if it beats the baseline significantly **[DOMAIN, checked by EXP]**
 **Decision.** Rank candidates by validation PR-AUC (mean over seeds for the forest and the network). Use the best one only if the paired bootstrap interval of *best − baseline* lies entirely above 0; otherwise use the baseline.
 **Result.** Best on validation: tuned gradient boosting 0.736 (random forest 0.734, seed mean); baseline logistic regression 0.723; difference interval −0.022 to +0.043 → **the logistic regression is used for inference and explanations.** On test: LR 0.709, RF 0.712, GBM 0.712 — all within each other's intervals.
 **Why.** The brief asks to justify complex models against the baseline. Our first version picked the random forest because it was 0.0004 ahead, a margin that flipped with the random seed. The rule makes the choice robust and follows "complexity must earn its place". A bonus: logistic regression is deterministic and well calibrated, so its results do not change between environments.
 **Evidence.** §9.4.
 
-### D25 — Shallow neural network: 2 hidden layers (32 → 16), built with Keras **[EXP]**
+### D25 — Shallow neural network: 2 hidden layers (32 → 16), built with Keras **[DOMAIN]**
 **Decision.** Input: the 29 imputed and scaled columns → Dense 32 ReLU → Dense 16 ReLU → 1 sigmoid output (the podium probability). Each hidden layer has dropout 20% and an L2 penalty of 1e-4. Loss: binary cross-entropy, unweighted (D20). Optimiser: Adam, learning rate 0.001, batches of 128. Training stops when validation PR-AUC has not improved for 15 epochs, and the best epoch's weights are kept. Trained 3 times (seeds 42, 1, 2); the seed-42 network is the one reported.
 **Why.** The brief asks for a shallow network (roughly 1–2 hidden layers) and allows a standard library such as Keras. Two small layers give only 1,505 weights, small compared with ~10,000 training rows. Dropout (switching off 20% of the units at random while training), L2 (large weights cost extra) and early stopping all limit overfitting. The 3 seeds show how much the result depends on the random starting weights: validation PR-AUC 0.726–0.729.
-**Evidence.** §9.3 (model summary, learning curves, seed table).
+**Evidence.** §9.3 (weight count, learning curves, seed table).
 
 ### D26 — Explain the inference model on the test seasons; cross-check with a tree model **[DOMAIN]**
 **Decision.** Permutation importance (per feature and per group) and SHAP (exact LinearExplainer) for the logistic regression; mean-|SHAP| cross-check for tuned gradient boosting; local SHAP waterfall + LIME (5 seeds) for Verstappen, 2023 Belgian GP; SHAP for the most confident wrong prediction. Computed on 2022–2024.
