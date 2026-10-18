@@ -19,6 +19,6 @@ Dataset: [Formula 1 World Championship (1950–2024)](https://www.kaggle.com/dat
 
 **Locally:** put the 14 CSV files in a folder called `data/` next to the notebook, `pip install -r requirements.txt`, then run all cells. Outputs go to `outputs/`.
 
-A full run takes about 10 minutes on a 2-core CPU (most of it in the neural networks, the gradient-boosting grid search and the bootstrap intervals).
+A full run takes about 40 minutes on a cloud CPU (most of it in retraining the neural network for the ablation, the network's SHAP values and the bootstrap intervals).
 
-The cleaning, the data-engineering answers and the logistic regression (the model used for inference) are deterministic. Random forest and the neural networks can move slightly under other library versions; the notebook reports their spread over random seeds.
+The cleaning, the data-engineering answers, the logistic regression and gradient boosting are deterministic. Random forest and the neural networks can move slightly under other library versions; the notebook reports their spread over random seeds.
