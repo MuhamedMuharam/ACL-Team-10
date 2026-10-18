@@ -67,7 +67,7 @@
 <ul>
 <li>Rate = mechanical retirements ÷ race starts. Cars that were on the grid but did not take the start are not starts.</li>
 <li>The strict rate counts only labels that name a failed component. The broad rate adds ambiguous labels, as a robustness check.</li>
-<li><b>Teams are grouped by lineage.</b> A renamed team keeps its factory, staff and car, but gets a new <code>constructorId</code>, and four renames fall on the period boundary (Racing Point → Aston Martin and Renault → Alpine in 2021, AlphaTauri → RB and Alfa Romeo → Sauber in 2024). A small dictionary joins Toro Rosso → AlphaTauri → RB, Force India → Racing Point → Aston Martin, Lotus F1 → Renault → Alpine, Sauber ↔ Alfa Romeo and Marussia → Manor, as the dataset notes recommend.</li>
+<li><b>Teams are grouped by lineage.</b> A renamed team keeps its factory, staff and car, but gets a new <code>constructorId</code>, and four renames fall on the period boundary (Racing Point → Aston Martin and Renault → Alpine in 2021, AlphaTauri → RB and Alfa Romeo → Sauber in 2024). A small dictionary joins Toro Rosso → AlphaTauri → RB, Force India → Racing Point → Aston Martin, Lotus F1 → Renault → Alpine, Sauber ↔ Alfa Romeo and Marussia → Manor. Each lineage is then compared with itself across the two periods.</li>
 <li>Only lineages with ≥ 30 starts are ranked; rates have 95% Wilson intervals, and a chi-square test asks whether teams differ at all.</li>
 </ul>
 <figure><img src="../outputs/figures/10_q3_mechanical.png"><figcaption><b>Figure 2.4</b> Mechanical-retirement rate per race start, by team lineage: bars = strict rate with 95% interval, × = broad rate (+ ambiguous labels), n = starts.</figcaption></figure>
