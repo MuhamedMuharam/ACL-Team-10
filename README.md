@@ -2,6 +2,8 @@
 
 Predict, for every driver on the starting grid of a Formula 1 race, whether he finishes on the podium (top 3), using only information known after qualifying and before the race starts.
 
+Kaggle notebook: [ACL Project – Team 10](https://www.kaggle.com/code/muhamedmuharam/notebook699276446c)
+
 Dataset: [Formula 1 World Championship (1950–2024)](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020) (Kaggle / Ergast), 14 relational tables.
 
 ## Files
