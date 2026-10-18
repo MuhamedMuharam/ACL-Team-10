@@ -1,0 +1,19 @@
+<div class="kicker">Milestone 1 · Analytical report</div>
+<h1 class="title">Formula 1 Podium Prediction</h1>
+<p class="sub">For every driver on the starting grid of a race, predict whether they finish in the top three, using only information known after qualifying and before the start.</p>
+<table class="meta">
+<tr><td>Team 10</td><td>Omar Ahmed Fawzy Ahmed Amin · Khaled Mohamed Karam Alah Salleh · Youssef Ahmed Fathy Elsayed Elfeky · Muhamed Muhamed Muharam Mustafa</td></tr>
+<tr><td>Kaggle notebook</td><td><span class="todo">[add the public Kaggle notebook link]</span></td></tr>
+<tr><td>GitHub repository</td><td>github.com/MuhamedMuharam/ACL-Team-10</td></tr>
+<tr><td>Dataset</td><td>Formula 1 World Championship (1950–2024), Kaggle / Ergast, 14 relational tables</td></tr>
+<tr><td>Notebook</td><td><code>F1_Podium_Prediction.ipynb</code>: one Run All, sections 1–13; every decision (D1–D30) is logged in <code>DECISIONS.md</code></td></tr>
+</table>
+<h2>Summary</h2>
+<ul>
+<li><b>Data.</b> 26,759 raw result rows become <b>24,715 driver-race rows</b>: the cars on the grid at the prediction cutoff, one row per driver per race, with the Indianapolis 500 and failed qualifiers removed. Models are trained on <b>every season from 1950 to 2019</b>, tuned on 2020–2021 and tested once on 2022–2024. A later start was tested: none predicts better, and starting in 1994 is significantly worse.</li>
+<li><b>Q1, front-row conversion.</b> Front-row cars podiumed more often after 2014: <b>68.0% → 75.9%</b> (p = 0.013). Suzuka, Yas Marina and Monaco convert best after 2014, but circuits are not statistically distinguishable in either period, so a real change in the <i>ranking</i> cannot be shown. A front-row qualifier moved back by a penalty podiums only 28%, against 73% for one who starts there.</li>
+<li><b>Q2, home advantage.</b> Comparing drivers who started from similar grid slots in the same era, home drivers podium <b>0.8 percentage points less</b> often, and the logistic odds ratio is 0.93 (95% CI 0.79–1.11). There is <b>no evidence of a home advantage</b>.</li>
+<li><b>Q3, mechanical retirements</b> (teams grouped by lineage). They fell from <b>8.9% to 5.5% of race starts</b>. Highest in 2014–2021: Caterham (21.2%), Toro Rosso → AlphaTauri → RB (14.4%), Lotus F1 → Renault → Alpine (13.2%). In 2022–2024 the Enstone team (Alpine, 10.4%) is highest, but team differences are not significant.</li>
+<li><b>Models.</b> Five learned models on 18 features reach validation PR-AUC 0.72–0.74, against 0.64 for a grid-only rule and 0.15 for a random model. None beats the <b>logistic-regression baseline</b> by more than noise, so it is the recommended model: <b>test PR-AUC 0.722</b> (tied best), ROC-AUC 0.937, well calibrated. All five are explained and have their own inference function.</li>
+<li><b>Explainability.</b> In all five models, starting position dominates, followed by season-long strength (standings) and recent form. These explanations describe what the models rely on, <b>not what causes a podium</b>.</li>
+</ul>

@@ -1,0 +1,52 @@
+<h1>6. Inference functions</h1>
+<p>Each model has its own function: <code>predict_podium_lr</code>, <code>predict_podium_rf</code>, <code>predict_podium_gb_default</code>, <code>predict_podium_gb_tuned</code> and <code>predict_podium_nn</code> (D27). Each takes one driver's pre-race information as a dictionary and returns the podium probability, a yes/no decision at that model's validation-tuned threshold, and the list of missing features. <b><code>predict_podium_lr</code> is the recommended one</b> (Section 4.5). All five share one input check and use their model's own fitted preprocessing, so missing values are treated exactly as in training (training median plus the "was missing" indicator).</p>
+<ul>
+<li><b>Required:</b> <code>grid_pos</code> and <code>field_size</code>. A raw grid of 0 is read as a pit-lane start and moved to the last slot (D7).</li>
+<li><b>Derived when absent:</b> <code>grid_pct</code> from slot and field size, and <code>grid_penalty</code> from slot and qualifying position.</li>
+<li><b>Rejected with an error:</b> unknown feature names (a typo would otherwise silently count as "missing"), a grid slot outside the field or not a whole number, shares and rates outside 0–1, and a <code>grid_pct</code> that contradicts the slot.</li>
+</ul>
+<table class="num">
+<tr><th>demo record</th><th>LR (0.241)</th><th>RF (0.279)</th><th>GB default (0.398)</th><th>GB tuned (0.212)</th><th>NN (0.265)</th></tr>
+<tr><td class="l">1. complete: Verstappen, 2023 Belgian GP (he won)</td><td>0.735 podium</td><td>0.490 podium</td><td>0.538 podium</td><td>0.230 podium</td><td>0.513 podium</td></tr>
+<tr><td class="l">2. partially missing: Guanyu Zhou, 2022 Bahrain GP, his first race (own form missing)</td><td>0.004 no</td><td>0.002 no</td><td>0.001 no</td><td>0.087 no</td><td>0.001 no</td></tr>
+<tr><td class="l">3. the same debutant from the pit lane (raw grid 0)</td><td>0.002 no</td><td>0.001 no</td><td>0.000 no</td><td>0.087 no</td><td>0.001 no</td></tr>
+</table>
+<p class="cap"><b>Table 6.1</b> The two required demonstrations (a complete and a partially-missing record) plus a pit-lane variant, from every function (threshold in brackets). The partial record is real: a debutant's grid, qualifying and team data are known, but he has no past races, so his own form is missing, exactly as for every debutant in training. He did not podium.</p>
+<table class="num narrow">
+<tr><th>removed from Verstappen's complete record</th><th>LR</th><th>NN</th></tr>
+<tr><td>nothing</td><td>0.735</td><td>0.513</td></tr>
+<tr><td>qualifying group</td><td>0.603</td><td>0.676</td></tr>
+<tr><td>form group</td><td>0.539</td><td>0.851</td></tr>
+<tr><td>qualifying and form</td><td>0.391</td><td>0.833</td></tr>
+</table>
+<p class="cap"><b>Table 6.2</b> What happens when blocks of a veteran's record are missing (all five models in notebook §12).</p>
+<ul>
+<li><b>For the recommended logistic regression, removing information lowers the probability step by step</b> (0.735 → 0.603 → 0.539 → 0.391): without qualifying it no longer knows he was fastest, and without form it no longer sees his podium run. That is the behaviour a user would expect.</li>
+<li><b>The network moves the other way</b> (0.513 → 0.833). In training, a row without qualifying is almost always a pre-1994 row, and a row without form is a debutant; a veteran with both missing is a pattern the network never saw, so its output is not reliable there.</li>
+<li><b>The lesson:</b> an imputed prediction is only as good as the training data's examples of that missing pattern. That is why every function returns the list of missing features, and why the realistic partial demo (a debutant) is the one a user will actually meet.</li>
+</ul>
+
+<h1 style="break-before:auto;margin-top:22px">7. Known limitations</h1>
+<ul>
+<li><b>Historical qualifying-coverage drift.</b> Qualifying data starts in 1994 and is patchy until 2002 (100% of 1950–1993 rows and 53.6% of 1994–2002 rows have no qualifying position). The models learn qualifying mostly from 2003 on, and the missing indicators double as an "old era" marker, which makes records with qualifying missing less reliable (Section 6). Keeping these seasons was tested, not assumed: no later start year predicts better, and starting in 1994 is significantly worse (Section 3.4); filling qualifying with the grid slot instead of the median was also worse (notebook §8.5).</li>
+<li><b>Era sensitivity.</b> Rules, reliability and field sizes changed a lot. A pole start converts 51%, 65% or 81% depending on the era (Figure 1.6), and the old seasons are much harder to rank. The test seasons start a new set of technical rules and the models still transfer, but a future rule change may not behave the same way.</li>
+<li><b>Small evaluation sets.</b> Validation has 39 races and test 68, so PR-AUC intervals are about ±0.06–0.11 wide. Differences between our learned models are inside them. Validation scores are slightly optimistic, because validation was used for several choices.</li>
+<li><b>Independent predictions.</b> Each driver is scored alone. Nothing forces exactly three podiums per race, so the yes/no output of the logistic regression predicts about 4–5 per race. A race-level model (Plackett–Luce or a conditional logit) would fix this; it is out of scope for this milestone.</li>
+<li><b>No race-day information.</b> Weather, tyre strategy, safety cars, crashes and breakdowns are not in the data and cause many upsets. The most confident miss is a pole-sitter's brake failure (Section 5.4).</li>
+<li><b>Team identity in the features.</b> A renamed team gets a new <code>constructorId</code>, so its constructor form history restarts at the rename. Q3 groups teams by lineage; the features do not.</li>
+<li><b>Data quirks documented but not fully fixable:</b> shared drives in the 1950s (the starting car cannot always be identified, D4, and one race still has four podium rows); a few vacant positions after disqualifications (D8); the broken race times of the 2024 Belgian GP (Section 1.3); some cars that failed before the start are coded as 0-lap retirements and count as starts in Q3; and for raw grid 0, telling a pit-lane starter from a car that never started uses the post-race <code>laps</code> column (D6, D7), which affects a handful of rows.</li>
+</ul>
+
+<h2>How to reproduce</h2>
+<p>On Kaggle: attach the dataset, turn Internet on (the first cell installs <code>shap</code>, <code>lime</code> or <code>statsmodels</code> if missing), and press Run All. Locally: put the 14 CSVs in <code>data/</code>, install <code>requirements.txt</code>, run all cells. The notebook writes the tables and every figure of this report to <code>outputs/</code>; this report is rebuilt from <code>report/</code> with <code>python report/build.py</code>. The cleaning, the DE answers, the logistic regression and gradient boosting are deterministic; the random forest and the network are seeded and report their spread over three seeds.</p>
+
+<h2>References</h2>
+<ul>
+<li>Ergast Developer API / Kaggle: Formula 1 World Championship (1950–2024), by R. Rao.</li>
+<li>van den Goorbergh, R., van Smeden, M., Timmerman, D., Van Calster, B. (2022). The harm of class imbalance corrections for risk prediction models: illustration and simulation using logistic regression. <i>JAMIA</i> 29(9), 1525–1534.</li>
+<li>Henderson, D. A., Kirrane, L. J. (2018). A comparison of truncated and time-weighted Plackett–Luce models for probabilistic forecasting of Formula One results. <i>Bayesian Analysis</i> 13(2), 335–358.</li>
+<li>Lundberg, S. M., Lee, S.-I. (2017). A unified approach to interpreting model predictions. NeurIPS.</li>
+<li>Ribeiro, M. T., Singh, S., Guestrin, C. (2016). "Why should I trust you?" Explaining the predictions of any classifier. KDD.</li>
+<li>Wilson, E. B. (1927). Probable inference, the law of succession, and statistical inference. <i>JASA</i> 22(158), 209–212.</li>
+<li>scikit-learn documentation (<code>average_precision_score</code>, <code>HistGradientBoostingClassifier</code>); Keras documentation.</li>
+</ul>

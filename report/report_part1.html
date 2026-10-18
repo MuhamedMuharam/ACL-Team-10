@@ -1,0 +1,98 @@
+<h1>1. Data, audit and cleaning</h1>
+
+<h2>1.1 Dataset, unit of analysis and the prediction cutoff</h2>
+<p>The data is spread over 14 linked tables. One row of the modeling table is <b>one driver entering one race</b>, and the target is <code>podium = positionOrder ≤ 3</code>. The prediction is made <b>after qualifying and before the start</b>. Anything produced by the race itself is leakage: finishing position, points, laps, status, pit stops, lap times, and the standings published after that race.</p>
+<table>
+<tr><th>table</th><th>rows</th><th>use for race R</th><th>table</th><th>rows</th><th>use for race R</th></tr>
+<tr><td>lap_times</td><td>589,081</td><td>post-race (not used)</td><td>races</td><td>1,125</td><td>pre-race (year, round, date, circuit)</td></tr>
+<tr><td>driver_standings</td><td>34,863</td><td>previous race only</td><td>drivers</td><td>861</td><td>pre-race (date of birth, nationality)</td></tr>
+<tr><td>results</td><td>26,759</td><td>grid only; the rest is the target or post-race</td><td>sprint_results</td><td>360</td><td>pre-race, but not used (D12)</td></tr>
+<tr><td>constructor_standings</td><td>13,391</td><td>previous race only</td><td>constructors</td><td>212</td><td>lookup</td></tr>
+<tr><td>constructor_results</td><td>12,625</td><td>not used</td><td>status</td><td>139</td><td>post-race (Q3 only)</td></tr>
+<tr><td>pit_stops</td><td>11,371</td><td>post-race (not used)</td><td>circuits</td><td>77</td><td>pre-race (country)</td></tr>
+<tr><td>qualifying</td><td>10,494</td><td>pre-race (position, Q1 time)</td><td>seasons</td><td>75</td><td>lookup</td></tr>
+</table>
+<p class="cap"><b>Table 1.1</b> The 14 tables and whether the current race's values may be used as features.</p>
+<p>All files are first read <b>as plain text</b>, so the audit sees them exactly as written, with no type guessing and no silent NaN conversion. The raw files are never modified: an MD5 fingerprint of each file is taken at the start and checked after cleaning, and all 14 are byte-for-byte unchanged (D1). An assertion also checks the dataset version (last season 2024).</p>
+
+<h2>1.2 Audit of the raw data (before cleaning)</h2>
+<p><b>Sentinel values.</b> Missing values are written as the literal text <code>\N</code>. Pandas reading the text sees <b>0 missing values</b>, so every one of them is hidden. Placeholders appear in 30 columns of 6 tables, and 68 cells are empty strings (all in <code>qualifying.q2/q3</code>), which mean the same thing. The missing values are <i>structural</i>:</p>
+<ul><li>session dates exist only for recent seasons;</li><li>finishing times are missing for non-finishers;</li><li><code>q2</code>/<code>q3</code> are missing for drivers knocked out earlier.</li></ul>
+<figure><img src="../outputs/figures/01_raw_sentinels.png" style="width:80%"><figcaption><b>Figure 1.1</b> Raw data: share of placeholder cells (<code>\N</code> red, empty string orange) per column.</figcaption></figure>
+<p><b>How the data changes over 75 seasons.</b> Early races had far more entries than today's 20 cars: up to almost 40 rows per race around 1989, with failed qualifiers included. As a result, only about 8–12% of rows are podiums in the busy eras, against about 15% today. A raw <code>grid = 0</code> means two different things (Table 1.2): before 1995 it is almost always a driver who never got onto the grid, while from 1995 it is mostly a pit-lane start.</p>
+<figure><img src="../outputs/figures/02_raw_eras.png"><figcaption><b>Figure 1.2</b> Raw data: (a) average entries per race, (b) share of rows that are podiums, (c) what <code>grid = 0</code> rows are, per era.</figcaption></figure>
+<table class="num narrow">
+<tr><th>outcome of a raw grid-0 row</th><th>1950–1994</th><th>1995–2024</th></tr>
+<tr><td>F: failed to qualify</td><td>1,334</td><td>14</td></tr>
+<tr><td>W: withdrawn</td><td>190</td><td>13</td></tr>
+<tr><td>D/E: disqualified or excluded</td><td>12</td><td>1</td></tr>
+<tr><td>R: retired in the race</td><td>1</td><td>13</td></tr>
+<tr><td>classified finisher</td><td>0</td><td>60</td></tr>
+</table>
+<p class="cap"><b>Table 1.2</b> The 1,638 raw rows with <code>grid = 0</code>. A grid 0 is a pit-lane start only for drivers who actually raced, which decides D6 and D7.</p>
+<p><b>Qualifying coverage drift.</b> <code>qualifying.csv</code> is empty before 1994. It covers 94% of races in 1994 and all of 1995, only 6–59% of races in 1996–2002, and every race from 2003. From 2003, at least 98.9% of result rows in every season have a qualifying row. So qualifying features are missing <i>by design</i> for most rows before 2003, and for those seasons the grid is the only record of the starting order.</p>
+<figure><img src="../outputs/figures/03_qualifying_coverage.png"><figcaption><b>Figure 1.3</b> Share of races with qualifying data (bars; green = complete) and share of result rows with a qualifying row (line), per season.</figcaption></figure>
+<p><b>Inconsistent text values</b> were found by code checks, not by eye:</p>
+<ul><li>the nationality <code>"Argentinian "</code> has a trailing space, and is the same nationality as <code>"Argentine"</code>;</li><li>the circuit country appears both as <code>"United States"</code> and as <code>"USA"</code>;</li><li>one constructor name contains an HTML code (<code>"Lotus-Pratt &amp;amp; Whitney"</code>).</li></ul>
+<p>Left alone, the first two would split one country into two groups in Q2. Dual or historical nationalities ("American-Italian", "East German") are real values, not errors. <b>Dates and durations stored as text</b> were also listed: dates; lap times such as <code>1:27.452</code>; the results <code>time</code> column, which mixes the winner's total time with gaps such as <code>+5.478</code>; pit-stop durations; and times of day.</p>
+
+<h2>1.3 Cleaning</h2>
+<table>
+<tr><th>step</th><th>what was done</th><th>result / check</th><th>decision</th></tr>
+<tr><td>Sentinels → missing</td><td>Every file re-read with <code>\N</code> and <code>""</code> as missing; <code>keep_default_na=False</code> so real text such as "NA" is kept</td><td>Cell-by-cell check: NaN ⇔ placeholder; 0 cells disagree (asserted)</td><td>—</td></tr>
+<tr><td>Semantic typing</td><td>Dates → datetime; lap, qualifying and fastest-lap times → seconds; pit durations → seconds; race times from <code>milliseconds</code>; <code>rank = 0</code> → missing</td><td>8 conversions, 0 parse failures (asserted); parsed lap times match the milliseconds column</td><td>—</td></tr>
+<tr><td>Plausibility rule</td><td>A race time below laps × 30 s is impossible</td><td>18 rows (2024 Belgian GP, where the column holds gaps) set to missing</td><td>—</td></tr>
+<tr><td>Text normalisation</td><td>Trailing spaces, "Argentinian" → "Argentine", "United States" → "USA", HTML codes unescaped</td><td>Nationalities 43 → 42, countries 35 → 34</td><td>D2</td></tr>
+<tr><td>Primary and foreign keys</td><td>14 primary keys, 5 natural join keys, 26 foreign-key links (incl. lap / pit / qualifying rows → a result in that race)</td><td>All unique and non-null; 0 orphans in all 26 links; every race has results</td><td>—</td></tr>
+<tr><td>Status categories</td><td>Each of the 139 labels mapped explicitly to one of 8 categories (Table 1.4)</td><td>Asserted: every label mapped, none twice</td><td>D3</td></tr>
+<tr><td>Grain: shared drives</td><td>85 (raceId, driverId) pairs (176 rows, 1950–1978); three keep rules compared (Table 1.5)</td><td>26,759 → 26,668 rows; (raceId, driverId) unique (asserted)</td><td>D4</td></tr>
+<tr><td>Indianapolis 500</td><td>Removed (1950–1960): a separate competition</td><td>−381 rows</td><td>D5</td></tr>
+<tr><td>Cars on the grid at the cutoff</td><td>Removed failed qualifiers and entries never on the grid; kept cars that qualified but did not start</td><td>−1,365 and −207 rows → 24,715 rows in 1,114 races</td><td>D6</td></tr>
+<tr><td>Starting position</td><td>Grid re-ranked 1 … field size among the kept cars; pit-lane starters to the last slot with a flag</td><td>73 pit-lane starts; 1 ≤ slot ≤ field size (asserted)</td><td>D7</td></tr>
+<tr><td>Target</td><td><code>podium = positionOrder ≤ 3</code>; <code>positionOrder</code> never used as a feature</td><td>Podium rate 13.5%; 1,113 races with 3 podium rows, 1 with 4</td><td>D8</td></tr>
+</table>
+<p class="cap"><b>Table 1.3</b> Cleaning steps in order, each with its count and the decision that justifies it (decisions in <code>DECISIONS.md</code>).</p>
+<p><b>Status categories (D3).</b> The brief defines mechanical as "a component of the car failed", which excludes crashes, the driver and regulation decisions. A label is mechanical only if it names a failed component. Damage usually caused by contact or the pit crew (tyres, wheels, wings, debris) is <code>ambiguous</code>, so those labels are treated the same way. "Withdrew" is decided per row in D6.</p>
+<table class="num narrow">
+<tr><th>category</th><th>labels</th><th>result rows</th><th class="l">examples</th></tr>
+<tr><td>finished</td><td>35</td><td>15,333</td><td class="l">Finished, +1 Lap, Not classified</td></tr>
+<tr><td>mechanical</td><td>65</td><td>6,317</td><td class="l">Engine, Gearbox, Hydraulics, Brakes, Power Unit</td></tr>
+<tr><td>accident_driver</td><td>11</td><td>2,839</td><td class="l">Accident, Collision, Spun off, Illness</td></tr>
+<tr><td>did_not_qualify</td><td>3</td><td>1,365</td><td class="l">Did not qualify, Did not prequalify, 107% Rule</td></tr>
+<tr><td>ambiguous</td><td>18</td><td>489</td><td class="l">Retired, Puncture, Wheel, Front wing, Debris</td></tr>
+<tr><td>withdrawn</td><td>1</td><td>248</td><td class="l">Withdrew</td></tr>
+<tr><td>regulation</td><td>3</td><td>156</td><td class="l">Disqualified, Excluded, Underweight</td></tr>
+<tr><td>team_operational</td><td>3</td><td>12</td><td class="l">Wheel nut, Fuel rig, Refuelling</td></tr>
+</table>
+<p class="cap"><b>Table 1.4</b> The 139 status labels in 8 categories, with how often each occurs in <code>results</code>.</p>
+<p><b>Duplicate drivers in one race (D4).</b> In the 1950s a driver could take over a team-mate's car mid-race, and then has two rows in the same race. At the 1957 British GP, Moss started car #18 from pole and later won in car #20, while Brooks drove #18 until its engine failed, so both drivers appear twice. Three keep rules were compared on two checks a clean table must pass:</p>
+<table class="num narrow">
+<tr><th>rule</th><th>races with &gt; 3 podium rows</th><th>drivers sharing one car</th></tr>
+<tr><td>A: keep the best <code>positionOrder</code></td><td>15</td><td>121</td></tr>
+<tr><td>B: keep the driver's own entry (lowest <code>resultId</code>)</td><td>2</td><td>36</td></tr>
+<tr><td><b>C: keep the car only he is recorded in, else B (chosen)</b></td><td><b>1</b></td><td><b>30</b></td></tr>
+</table>
+<p class="cap"><b>Table 1.5</b> Duplicate-rule comparison (lower is cleaner). All rules remove the same 67 non-Indy rows; they differ in which row survives.</p>
+<div class="side"><figure><img src="../outputs/figures/05_duplicate_rule.png"><figcaption><b>Figure 1.4</b> The three duplicate rules on the two integrity checks.</figcaption></figure>
+<div><p>Rule A credits a shared car's result to both drivers (Moss and Brooks "won" in 1957). It is also outcome-based row selection, which is a form of target leakage. Rule C keeps the car the driver started in, which is the car his pre-race information describes. For example, Ascari in 1951 started 3rd and retired, instead of "started 6th, finished 2nd" in his team-mate's car.</p>
+<p>All affected rows are from 1950–1978, <b>inside the training window</b> (D17). Rules A and B differ in 15 podium labels, B and C in one (Ascari, 1951), so C is the rule that keeps those training labels right.</p></div></div>
+<p><b>The Indianapolis 500 (D5).</b> It counted for the championship, but of its 107 drivers only 4 ever started another championship race. Its entry lists average 35 per race (55 in 1954), against 22 at other races of that decade. Of its 381 rows, 380 are American drivers racing in the USA, more than three times all other American home starts in 75 seasons. Keeping it would distort field sizes, podium rates and the home-race question; since the model trains from 1950, it would also put 381 oval-race rows into training.</p>
+<p><b>Who is in the table (D6).</b> The prediction is made after qualifying. At that moment, failed qualifiers (1,365 rows) and entries that never reached the grid (207 rows) are already out. Cars that qualified but then failed to start are still on the grid and are kept as non-podiums (137 rows, e.g. Leclerc on pole at Monaco 2021): dropping them would use information from after the cutoff.</p>
+<p><b>Starting position (D7).</b> Left as 0, a pit-lane start would look better than pole. In old seasons the raw grid numbers also have holes and ties (1981 German GP: no slots 19, 20, 24, 25, 27, and the last of 24 starters on grid 28). The grid is therefore re-ranked among the cars on the grid, and pit-lane starters go to the last slot with their own flag.</p>
+<figure><img src="../outputs/figures/04_durations_typed.png"><figcaption><b>Figure 1.5</b> Durations after semantic typing. The long tails are real events: 708 laps over 5 minutes (red flags, safety cars) and 517 "pit stops" over a minute (red-flag stoppages). They are not features, so they are kept as they are.</figcaption></figure>
+
+<h2>1.4 EDA after cleaning: what the cleaning changed</h2>
+<table class="num">
+<tr><th></th><th>rows</th><th>duplicate (race, driver) rows</th><th>grid = 0 rows</th><th>slot &gt; number of cars</th><th>podium rate</th><th>races</th></tr>
+<tr><td>raw</td><td>26,759</td><td>91</td><td>1,638</td><td>13</td><td>12.69%</td><td>1,125</td></tr>
+<tr><td>cleaned</td><td>24,715</td><td>0</td><td>0</td><td>0</td><td>13.53%</td><td>1,114</td></tr>
+</table>
+<p class="cap"><b>Table 1.6</b> The modeling grain before and after cleaning.</p>
+<figure><img src="../outputs/figures/06_eda_before_after.png"><figcaption><b>Figure 1.6</b> (a) Rows per season and (b) podium base rate, before vs after cleaning. (c) How the races of cars on the grid ended, by decade. (d) Podium rate by starting slot in three eras.</figcaption></figure>
+<ul>
+<li><b>(a, b)</b> Cleaning removes rows mostly from the 1950s and the busy late-1970s to 1990s, where entry lists were far larger than the grid. Removing failed qualifiers, who can never podium, raises the base rate in those eras (late 1980s: from about 8–10% to about 12%). Modern seasons are almost untouched (about 15%).</li>
+<li><b>(c) Reliability changed enormously.</b> In the 1950s–1980s around a third of the cars on the grid retired with a mechanical failure; in the 2020s most cars finish.</li>
+<li><b>(d) Starting position predicts podiums in every era, and much more strongly today.</b> Pole converts 51% in 1950–1979, 65% in 1980–2013 and 81% in 2014–2024. This motivates the grid features, and it is why the training window was tested rather than assumed (Section 3.4).</li>
+</ul>
+<figure><img src="../outputs/figures/06b_grid_before_after.png"><figcaption><b>Figure 1.7</b> Starting position before (raw <code>grid</code>, with a spike of 1,638 zeros) and after the re-ranking (no zeros, never behind the last car).</figcaption></figure>
+<div class="side"><img src="../outputs/figures/07_constructor_dominance.png" style="width:50%"><img src="../outputs/figures/07b_grid_vs_qualifying.png" style="width:50%"></div><figure><figcaption><b>Figure 1.8</b> Left: the share of a season's podiums taken by its most successful constructor. The median is 37.5%, and above half in 15 seasons (e.g. 2014–2016, 2019). The car matters, so constructor features are included. Right: cars whose grid slot differs from their qualifying position. Penalised or pit-lane cars per race rose from 1.0 in 2003–2013 to 1.5 in 2014–2024. On 2021–22 sprint weekends the sprint set the grid. Grid and qualifying are therefore both kept, with their difference as a feature.</figcaption></figure>

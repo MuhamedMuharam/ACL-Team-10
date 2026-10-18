@@ -1,0 +1,22 @@
+<h2>4.6 Feature-group ablation</h2>
+<p>Section 3 justified each feature before training. The ablation measures each group's contribution after training: we remove one group at a time and retrain with rows, hyperparameters and preprocessing unchanged, for <b>all five models</b> (the forest and the network averaged over 3 seeds), each change with a paired race-bootstrap interval. <b>Rule (D30):</b> a group or feature is removed from a model only if removing it improves that model's validation PR-AUC with an interval entirely above 0.</p>
+<table class="num">
+<tr><th>variant (validation)</th><th>LR</th><th>RF</th><th>GB default</th><th>GB tuned</th><th>NN</th></tr>
+<tr><td>all 18 features (PR-AUC)</td><td>0.723</td><td>0.730</td><td>0.724</td><td>0.736</td><td>0.723</td></tr>
+<tr><td>without grid</td><td>−0.003</td><td><b>−0.039*</b></td><td>+0.007</td><td>−0.035</td><td>+0.004</td></tr>
+<tr><td>without qualifying</td><td>−0.015</td><td>−0.004</td><td><b>−0.045*</b></td><td>−0.014</td><td>+0.004</td></tr>
+<tr><td>without standings</td><td>−0.009</td><td>−0.016</td><td><b>−0.054*</b></td><td><b>−0.029*</b></td><td>−0.004</td></tr>
+<tr><td>without form</td><td>+0.015</td><td>+0.004</td><td>+0.008</td><td>−0.003</td><td>+0.006</td></tr>
+<tr><td>without context</td><td><b>−0.009*</b></td><td>−0.004</td><td>−0.030</td><td>0.000</td><td>−0.003</td></tr>
+<tr><td>grid group only</td><td><b>−0.084*</b></td><td><b>−0.091*</b></td><td><b>−0.085*</b></td><td><b>−0.100*</b></td><td><b>−0.084*</b></td></tr>
+</table>
+<p class="cap"><b>Table 4.7</b> Change in validation PR-AUC against all 18 features (negative = the removed group helped). * = 95% paired race-bootstrap interval excludes 0. Test-season changes are in notebook §10.</p>
+<figure><img src="../outputs/figures/20_ablation.png"><figcaption><b>Figure 4.6</b> The same changes on validation and test, in hundredths of PR-AUC, for all five models.</figcaption></figure>
+<ul>
+<li><b>Starting position is the backbone, but not enough on its own.</b> Keeping only the two grid features loses 0.08–0.10 PR-AUC on validation for every model (0.05–0.08 on test), all significant. Together, the other groups add real information on top of the grid.</li>
+<li><b>Removing one group mostly changes little, because the groups overlap</b> (grid ↔ qualifying, standings ↔ form). The significant losses are model-specific: grid for the random forest, qualifying and standings for default gradient boosting, standings for tuned gradient boosting, context (through <code>experience</code>) for the logistic regression.</li>
+<li><b>Form shows no measurable contribution as a group</b> (its removal even raises the logistic regression by +0.015, interval −0.011 to +0.033): the standings carry the same season-long strength.</li>
+<li><b>Single features.</b> Removing <code>experience</code> alone hurts the logistic regression significantly (−0.009, interval −0.018 to −0.002); removing <code>grid_penalty</code> or <code>driver_age</code> is within noise for every model.</li>
+<li><b>Adding back the three no-signal candidates</b> (<code>pit_lane_start</code>, <code>home_race</code>, <code>field_size</code>, one at a time and all three together) never improves any model significantly; for the logistic regression every change is within ±0.001. This confirms D30.</li>
+<li><b>No group or feature meets the removal rule in any model</b>, so all five models keep the 18 features.</li>
+</ul>

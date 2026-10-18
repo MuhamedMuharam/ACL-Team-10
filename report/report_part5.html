@@ -1,0 +1,104 @@
+<h1>5. Explainability (XAI)</h1>
+<div class="box"><b>Explanations are not causal effects.</b> A feature being important means the model relies on it to predict. It does not mean the feature causes podiums. For example, <code>con_pts_share_before</code> is important because strong teams both score points and finish on the podium; giving a team points would not make its cars faster. Correlated features also share importance. Every statement in this section describes the models' behaviour, not the sport.</div>
+
+<h2>5.1 What we explain, and on which data</h2>
+<p>We explain <b>all five models</b>, leading with the recommended one, the logistic regression (Section 4.5); the other four serve as a cross-check of whether very different models rely on the same information. All explanations are computed on the unseen test seasons (2022–2024); explaining does not choose anything, so this does not leak.</p>
+<ul>
+<li><b>Global:</b> permutation importance per feature and per feature group; SHAP summary (beeswarm) and mean |SHAP| per model.</li>
+<li><b>Local:</b> a SHAP waterfall and LIME for the same single prediction, plus each model's most confident wrong prediction.</li>
+<li><b>SHAP set-up.</b> One model-agnostic <code>PermutationExplainer</code> for all five models, in probability units, on the original feature values. The background ("a typical driver") is 100 training rows from <b>2003–2019</b>, the seasons with complete qualifying data, like every row we explain (D26). For every explained row the base value plus the contributions equals the model's probability (largest gap 1e-8).</li>
+</ul>
+
+<h2>5.2 Permutation importance (global)</h2>
+<p>We shuffle one feature's values across the test rows, which breaks its link to the outcome, and measure how much test PR-AUC drops (20 repeats). We also shuffle whole groups together, which is fairer for correlated features: shuffling only <code>grid_pos</code> still leaves <code>grid_pct</code> intact.</p>
+<figure><img src="../outputs/figures/21_permutation_importance.png"><figcaption><b>Figure 5.1</b> Drop in test PR-AUC when a feature or a whole group is shuffled, for each model (mean of 20 shuffles).</figcaption></figure>
+<table class="num">
+<tr><th>group shuffled</th><th>LR</th><th>RF</th><th>GB default</th><th>GB tuned</th><th>NN</th></tr>
+<tr><td>grid</td><td>0.284</td><td>0.225</td><td>0.245</td><td>0.363</td><td>0.217</td></tr>
+<tr><td>qualifying</td><td>0.060</td><td>0.001</td><td>0.009</td><td>0.006</td><td>0.038</td></tr>
+<tr><td>standings</td><td>0.044</td><td>0.076</td><td>0.054</td><td>0.049</td><td>0.055</td></tr>
+<tr><td>form</td><td>0.041</td><td>0.025</td><td>0.040</td><td>0.033</td><td>0.041</td></tr>
+<tr><td>context</td><td>0.002</td><td>0.002</td><td>−0.009</td><td>0.000</td><td>−0.000</td></tr>
+</table>
+<p class="cap"><b>Table 5.1</b> Drop in test PR-AUC when a whole group is shuffled.</p>
+<ul>
+<li><b>Every model depends overwhelmingly on where the car starts</b> (a drop of 0.22–0.36), then on season-long strength and recent form.</li>
+<li><b>The logistic regression also uses qualifying</b> (0.060); the tree models barely do, because for them the grid already carries the same ranking.</li>
+<li><b>Context adds nothing measurable</b> in any model, in line with the ablation.</li>
+<li><b>Single features:</b> <code>grid_pos</code> is clearly above 0 in every model; most single standings and form features are not, because a correlated partner takes over when one is shuffled. This is why the group view is the fairer one.</li>
+</ul>
+
+<h2>5.3 SHAP (global)</h2>
+<div class="side"><figure><img src="../outputs/figures/22_shap_beeswarm_model1.png"><figcaption><b>Figure 5.2</b> SHAP summary of the logistic regression on 303 test rows. Each dot is one driver-race; horizontal position is how much that feature moved the probability; colour is the feature's value (red = high).</figcaption></figure>
+<div><table class="num"><tr><th>input (scaled)</th><th>weight</th></tr>
+<tr><td>grid_pos</td><td>−1.482</td></tr>
+<tr><td>missing: quali_gap_pct</td><td>+0.880</td></tr>
+<tr><td>quali_position</td><td>−0.333</td></tr>
+<tr><td>missing: grid_penalty</td><td>−0.282</td></tr>
+<tr><td>missing: quali_position</td><td>−0.282</td></tr>
+<tr><td>con_avg_finish_last5</td><td>−0.205</td></tr>
+<tr><td>con_rank_before</td><td>−0.163</td></tr>
+<tr><td>drv_podium_rate_last5</td><td>+0.161</td></tr>
+<tr><td>con_pts_share_before</td><td>+0.130</td></tr>
+<tr><td>drv_pts_share_before</td><td>+0.107</td></tr></table>
+<p class="cap"><b>Table 5.2</b> The largest logistic-regression weights: change in log-odds per standard deviation, the others held fixed.</p></div></div>
+<table class="num">
+<tr><th>share of mean |SHAP|</th><th>LR</th><th>RF</th><th>GB default</th><th>GB tuned</th><th>NN</th></tr>
+<tr><td>grid</td><td>37.6%</td><td>38.7%</td><td>35.9%</td><td>58.8%</td><td>34.3%</td></tr>
+<tr><td>standings</td><td>16.5%</td><td>33.0%</td><td>25.2%</td><td>25.0%</td><td>21.8%</td></tr>
+<tr><td>form</td><td>20.0%</td><td>19.3%</td><td>21.0%</td><td>14.1%</td><td>27.6%</td></tr>
+<tr><td>qualifying</td><td>20.2%</td><td>8.1%</td><td>6.7%</td><td>2.1%</td><td>11.6%</td></tr>
+<tr><td>context</td><td>5.7%</td><td>0.9%</td><td>11.2%</td><td>0.0%</td><td>4.8%</td></tr>
+</table>
+<p class="cap"><b>Table 5.3</b> Each model's total mean |SHAP| on the explained test rows, split by feature group.</p>
+<figure><img src="../outputs/figures/23_shap_bar.png"><figcaption><b>Figure 5.3</b> Mean |SHAP| (probability) per feature on test, for every model.</figcaption></figure>
+<ul>
+<li><b>Starting position dominates in all five models</b> (34–59% of the total); <code>grid_pos</code> or <code>grid_pct</code> is the top feature everywhere. Five very different models rely on the same information: where the car starts, and how strong the driver and team have been.</li>
+<li><b>Directions are sensible.</b> A slot near the front, a strong constructor points share and a recent podium habit push the prediction up; a poor team average finish pushes it down.</li>
+<li><b>The missing-qualifying indicators have large weights of opposite sign</b> (+0.88, −0.28, −0.28). They cancel when all three are missing together, the usual pattern before 1994. Because the SHAP background now contains only rows with qualifying data, like the test rows, these indicators no longer show up as a large artificial contribution (D26).</li>
+<li>Single weights of correlated inputs (e.g. <code>grid_pos</code> −1.48 vs <code>grid_pct</code> −0.01) split shared information; read the group totals, not single numbers.</li>
+</ul>
+
+<h2>5.4 Local SHAP: one prediction explained</h2>
+<p>We explain a well-known test case: <b>Max Verstappen at the 2023 Belgian GP</b>. He was fastest in qualifying, took a 5-place gearbox penalty, started 6th, and won. Inputs: grid 6 of 20, qualifying position 1, <code>grid_penalty</code> 5; leading both championships (points share 1.00, win share 0.82, team win share 1.00); podiums in all of his last 5 races; no team mechanical failures in the last 10 races.</p>
+<div class="side"><figure><img src="../outputs/figures/24_shap_waterfall_model1.png"><figcaption><b>Figure 5.4</b> SHAP waterfall of the logistic regression, Verstappen at the 2023 Belgian GP (probability).</figcaption></figure>
+<div><table class="num"><tr><th>model</th><th>probability</th><th>decision</th></tr>
+<tr class="hl"><td>logistic regression</td><td>0.735</td><td>podium</td></tr>
+<tr><td>random forest</td><td>0.490</td><td>podium</td></tr>
+<tr><td>gradient boosting (default)</td><td>0.538</td><td>podium</td></tr>
+<tr><td>gradient boosting (tuned)</td><td>0.230</td><td>podium</td></tr>
+<tr><td>shallow NN</td><td>0.513</td><td>podium</td></tr></table>
+<p class="cap"><b>Table 5.4</b> All five models say "podium" at their own thresholds. He won.</p>
+<table class="num"><tr><th>LR, grid slot given</th><th>probability</th></tr>
+<tr><td>P1 (penalty 0)</td><td>0.840</td></tr><tr><td>P6 (actual, penalty 5)</td><td>0.735</td></tr><tr><td>P10 (penalty 9)</td><td>0.623</td></tr></table>
+<p class="cap"><b>Table 5.5</b> Model what-if (model behaviour, not a causal claim).</p></div></div>
+<ul>
+<li><b>The logistic regression:</b> base value 0.155 (the average prediction over the background drivers) + contributions 0.580 = <b>0.735</b>. Every group pushes up: qualifying +0.176, form +0.137, standings +0.125, grid +0.119, context +0.022. The largest single contributions are <code>grid_pos</code> (+0.118), <code>quali_position</code> (+0.117) and <code>drv_podium_rate_last5</code> (+0.086): his pole lap is credited, even though he started 6th.</li>
+<li><b>The models agree on the decision but not on the number</b> (0.230–0.735), because they are calibrated differently: tuned gradient boosting keeps all predictions near the average. The tree models credit his standings most (forest: standings +0.184).</li>
+</ul>
+<h3>The models' most confident mistakes</h3>
+<p>For the logistic regression, the forest and the network, the highest probability given to a driver who did <b>not</b> podium is the same row: <b>Verstappen at the 2024 Australian GP</b>, on pole and leading both championships (LR 0.849). He retired with a brake failure. For the LR every group pushed up (grid +0.313, form +0.139, standings +0.118, qualifying +0.101). Nothing in the pre-race data could have announced a component failure: the models rank the field well but cannot foresee breakdowns or crashes (Section 4.7).</p>
+
+<h2>5.5 LIME for the same prediction</h2>
+<p>LIME creates perturbed copies of the row, asks the model about each, and fits a small weighted linear model around that point. It describes features by ranges (e.g. <code>grid_pos ≤ 6</code>), changes features independently (so some synthetic rows are impossible), and is random, so we ran it with 5 seeds.</p>
+<figure><img src="../outputs/figures/25_lime.png"><figcaption><b>Figure 5.5</b> LIME for the same prediction, every model (seed 42).</figcaption></figure>
+<div><table class="num narrow"><tr><th>LIME condition (LR)</th><th>mean weight</th><th>seeds in top 10</th></tr>
+<tr><td>grid_pos ≤ 6</td><td>+0.131</td><td>5/5</td></tr>
+<tr><td>grid_penalty &gt; 0</td><td>+0.041</td><td>5/5</td></tr>
+<tr><td>quali_position ≤ 11</td><td>+0.032</td><td>5/5</td></tr>
+<tr><td>drv_podium_rate_last5 &gt; 0.20</td><td>+0.022</td><td>5/5</td></tr>
+<tr><td>con_avg_finish_last5 ≤ 0.39</td><td>+0.022</td><td>5/5</td></tr></table>
+<p class="cap"><b>Table 5.6</b> LIME weights for the logistic regression, averaged over 5 seeds. Local fit R² 0.69–0.70; LIME's own prediction 0.28 against the model's 0.735.</p></div>
+<ul>
+<li><b>Direction agrees with SHAP.</b> For every model <code>grid_pos ≤ 6</code> is the largest weight in all 5 seeds, followed by a qualifying or standings condition with the same sign SHAP gave.</li>
+<li><b>But LIME fits this point only approximately.</b> Its R² is 0.70 for the logistic regression and 0.34–0.52 for the forest, default gradient boosting and the network, and its own prediction (0.28 for the LR) is far from the model's. LIME draws synthetic rows from the whole training distribution, mostly midfield cars with near-zero podium chances, and one straight line through them cannot follow the steep rise near this row. (Tuned gradient boosting fits best, R² 0.88, only because its output barely moves.)</li>
+<li><b>SHAP is therefore the main local explanation</b>: it adds up exactly to each model's output.</li>
+</ul>
+
+<h2>5.6 Summary of the explanations</h2>
+<ul>
+<li>All methods and all five models agree that <b>starting position</b> is what the models rely on most, followed by <b>season-long strength</b> (standings) and <b>recent form</b>; the logistic regression also uses qualifying pace.</li>
+<li>Group-level views are the trustworthy ones: correlated features share and trade importance.</li>
+<li>The local explanations show what the models get right (a penalised pole-sitter in the dominant car is still a likely podium) and what they cannot know (a brake failure from pole).</li>
+<li>These explain the models' reasoning, not what causes a podium.</li>
+</ul>

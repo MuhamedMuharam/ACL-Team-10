@@ -1,0 +1,94 @@
+<h1>2. Data-engineering questions</h1>
+<p>Each answer joins several tables, shows a plot, and states its grain, how missing values were handled, and whether the pre-race cutoff matters. All three use the cleaned driver-race table of Section 1 (starters only, no Indianapolis 500, one row per driver per race).</p>
+
+<h2>2.1 Q1. Which circuits convert a front-row start into a podium most often, and does the ranking change after 2014?</h2>
+<p>Joins: <code>results</code> ⨝ <code>races</code> ⨝ <code>circuits</code> ⨝ <code>qualifying</code> ⨝ <code>sprint_results</code>. Set-up (D9):</p>
+<ul>
+<li>The front row is measured two ways: by <b>grid</b> (slot 1–2 after penalties) and by <b>qualifying</b> (1st–2nd).</li>
+<li>The periods are <b>2003–2013 vs 2014–2024</b>. 2003 is the first season with complete qualifying data, so both definitions use the same rows.</li>
+<li>A circuit is ranked only with at least 8 front-row starts (4 races) in both periods.</li>
+<li>Every rate gets a 95% Wilson interval. Chi-square tests ask whether circuits differ at all and whether the overall rate changed; Spearman's rank correlation asks whether the order carries over.</li>
+</ul>
+<figure><img src="../outputs/figures/08_q1_front_row.png"><figcaption><b>Figure 2.1</b> Front-row conversion per circuit with 95% intervals, 2003–2013 (blue) vs 2014–2024 (orange). Left: by grid slot. Right: by qualifying position (same circuit order).</figcaption></figure>
+<table class="num narrow">
+<tr><th>circuit (grid definition)</th><th>2003–13 rate</th><th>rank</th><th>n</th><th>2014–24 rate</th><th>rank</th><th>n</th></tr>
+<tr><td>Suzuka</td><td>72%</td><td>4</td><td>18</td><td>89%</td><td>1</td><td>18</td></tr>
+<tr><td>Sepang</td><td>64%</td><td>10</td><td>22</td><td>88%</td><td>2</td><td>8</td></tr>
+<tr><td>Yas Marina</td><td>60%</td><td>13</td><td>10</td><td>86%</td><td>3</td><td>22</td></tr>
+<tr><td>Monaco</td><td>77%</td><td>1</td><td>22</td><td>85%</td><td>4</td><td>20</td></tr>
+<tr><td>Spa-Francorchamps</td><td>72%</td><td>4</td><td>18</td><td>82%</td><td>5</td><td>22</td></tr>
+<tr><td>Silverstone</td><td>73%</td><td>3</td><td>22</td><td>75%</td><td>9</td><td>24</td></tr>
+<tr><td>Monza</td><td>77%</td><td>1</td><td>22</td><td>73%</td><td>12</td><td>22</td></tr>
+<tr><td>Hungaroring</td><td>64%</td><td>10</td><td>22</td><td>59%</td><td>17</td><td>22</td></tr>
+</table>
+<p class="cap"><b>Table 2.1</b> Selected circuits from the full 17-circuit ranking (notebook §5.1): conversion rate, rank and number of front-row starts per period.</p>
+<div class="side"><figure><img src="../outputs/figures/08a_q1_grid_vs_quali_cases.png"><figcaption><b>Figure 2.2</b> Podium rate of front-row cars by how their grid slot relates to their qualifying position (95% intervals).</figcaption></figure>
+<div><table class="num"><tr><th>front-row case, 2003–2024</th><th>n</th><th>podium</th></tr>
+<tr><td>qualified and started on the front row</td><td>819</td><td>72.5%</td></tr>
+<tr><td>promoted by others' penalties</td><td>32</td><td>62.5%</td></tr>
+<tr><td>sprint set the grid (2021–22)</td><td>10</td><td>60.0%</td></tr>
+<tr><td>qualified front row, moved back by a penalty</td><td>32</td><td>28.1%</td></tr></table>
+<p class="cap"><b>Table 2.2</b> Grid vs qualifying: why both definitions matter.</p></div></div>
+<div class="box"><b>Answer.</b>
+<ul>
+<li><b>Front-row starts convert more often after 2014:</b> 68.0% (n = 400) → 75.9% (n = 456), chi-square p = 0.013.</li>
+<li><b>Best converters.</b> After 2014: Suzuka (89%), Sepang (88%, only 8 starts), Yas Marina (86%) and Monaco (85%). Before: Monaco and Monza (77%) and Silverstone (73%).</li>
+<li><b>The ranking appears to change, but the change cannot be shown.</b> Monza falls from joint 1st to 12th and Yas Marina rises from 13th to 3rd. But each circuit has only 8–24 starts per period, the circuits are not statistically distinguishable in either period (p = 0.99 and 0.80), and the rank correlation between periods is weak and not significant (ρ = 0.21, p = 0.42). Monza's fall is one podium fewer (17 → 16 of 22), because all circuits sit between 58% and 89%. By qualifying position ρ = 0.45 (p = 0.07). The robust finding is the overall rise.</li>
+<li><b>Grid vs qualifying matters.</b> A front-row qualifier moved back by a penalty podiums only 28%, against 73% for one who starts there (Table 2.2). The grid after penalties is therefore the better measure of the real starting chance.</li>
+</ul></div>
+<p class="grain"><b>Grain / missingness / cutoff.</b> One row per driver-race, aggregated per circuit and period. The 22 rows from 2003–2024 without a qualifying position all started 19th or lower, so none is a front-row case; they are kept, not imputed. Grid, qualifying and the sprint result are all known before the race.</p>
+
+<h2>2.2 Q2. Do drivers podium more often at home, after controlling for starting position?</h2>
+<p>Joins: <code>results</code> ⨝ <code>races</code> ⨝ <code>circuits</code> (country) ⨝ <code>drivers</code> (nationality). Set-up (D10):</p>
+<ul>
+<li>A home race means the circuit's country matches the driver's nationality. The match uses an explicit hand-written map (e.g. "British" → "UK"), and both lists of values were checked for gaps. The circuit's location decides, not the race name, and a dual nationality counts both countries.</li>
+<li><b>Control:</b> home and away are compared within the same grid bucket (1 / 2–3 / 4–6 / 7–10 / 11+) × era (1950–79 / 1980–2013 / 2014–24). This is a pivot table, drawn as a heatmap; the cells are averaged with weights = home starts.</li>
+<li><b>Test:</b> a logistic regression <code>podium ~ home + grid slot + era</code> with race-clustered standard errors (drivers in one race are not independent).</li>
+</ul>
+<figure><img src="../outputs/figures/09_q2_home.png"><figcaption><b>Figure 2.3</b> Left: home − away podium rate (percentage points) within each grid bucket × era; n = home starts. Right: podium rate at home (red) vs away (grey) per grid bucket, all eras, with 95% intervals.</figcaption></figure>
+<table class="num narrow">
+<tr><th>estimate</th><th>home − away (pp)</th></tr>
+<tr><td>raw, no control</td><td>−2.12</td></tr>
+<tr><td>within grid bucket</td><td>−0.60</td></tr>
+<tr><td><b>within grid bucket × era (main)</b></td><td><b>−0.83</b></td></tr>
+</table>
+<p class="cap"><b>Table 2.3</b> Home effect in percentage points (1,944 home starts). Logistic regression (clustered by race): odds ratio 0.93 (95% CI 0.79–1.11), p = 0.43.</p>
+<div class="box"><b>Answer.</b>
+<ul>
+<li><b>No evidence that drivers podium more often at home once starting position is accounted for.</b> The odds ratio 0.93 has an interval (0.79–1.11) that includes 1.</li>
+<li><b>The raw gap comes from who races at home.</b> Raw, home drivers podium 2.1 pp less often. 13.1% of home starts are by drivers with five or fewer career starts (one-off local entrants), against 1.4% of away starts.</li>
+<li><b>Controlling shrinks the gap</b> to −0.6 pp within grid buckets and −0.8 pp within grid bucket × era, about 61% less than raw. The 15 heatmap cells range from −15.0 to +7.7 pp, with signs in both directions in every era: no consistent home effect.</li>
+<li>This is an association, not a causal effect.</li>
+</ul></div>
+<p class="grain"><b>Grain / missingness / cutoff.</b> One row per driver-race. Nationality and circuit country have no missing values; nationalities with no circuit in their country (e.g. Finnish) are always "away". Nationality, circuit and grid are known before the race, so <code>home_race</code> would be a legal feature; it was built as a candidate, but it shows no signal and is not a model input (D30).</p>
+
+<h2>2.3 Q3. Which constructors have the highest mechanical-retirement rate in 2014–2021 vs 2022–2024?</h2>
+<p>Joins: <code>results</code> ⨝ <code>races</code> ⨝ <code>status</code> (category, D3) ⨝ <code>constructors</code>. Set-up (D11):</p>
+<ul>
+<li>Rate = mechanical retirements ÷ race starts. Cars that were on the grid but did not take the start are not starts.</li>
+<li>The strict rate counts only labels that name a failed component. The broad rate adds ambiguous labels, as a robustness check.</li>
+<li><b>Teams are grouped by lineage.</b> A renamed team keeps its factory, staff and car, but gets a new <code>constructorId</code>, and four renames fall on the period boundary (Racing Point → Aston Martin and Renault → Alpine in 2021, AlphaTauri → RB and Alfa Romeo → Sauber in 2024). A small dictionary joins Toro Rosso → AlphaTauri → RB, Force India → Racing Point → Aston Martin, Lotus F1 → Renault → Alpine, Sauber ↔ Alfa Romeo and Marussia → Manor, as the dataset notes recommend.</li>
+<li>Only lineages with ≥ 30 starts are ranked; rates have 95% Wilson intervals, and a chi-square test asks whether teams differ at all.</li>
+</ul>
+<figure><img src="../outputs/figures/10_q3_mechanical.png"><figcaption><b>Figure 2.4</b> Mechanical-retirement rate per race start, by team lineage: bars = strict rate with 95% interval, × = broad rate (+ ambiguous labels), n = starts.</figcaption></figure>
+<table class="num">
+<tr><th>2014–2021 (overall 8.9%)</th><th>starts</th><th>strict</th><th>95% CI</th><th>2022–2024 (overall 5.5%)</th><th>starts</th><th>strict</th><th>95% CI</th></tr>
+<tr><td class="l">Caterham</td><td>33</td><td>21.2%</td><td>10.7–37.8</td><td class="l">Lotus F1 → Renault → Alpine</td><td>135</td><td>10.4%</td><td>6.3–16.7</td></tr>
+<tr><td class="l">Toro Rosso → AlphaTauri → RB</td><td>319</td><td>14.4%</td><td>11.0–18.7</td><td class="l">Sauber ↔ Alfa Romeo</td><td>136</td><td>8.8%</td><td>5.1–14.8</td></tr>
+<tr><td class="l">Lotus F1 → Renault → Alpine</td><td>318</td><td>13.2%</td><td>9.9–17.4</td><td class="l">Toro Rosso → AlphaTauri → RB</td><td>136</td><td>5.9%</td><td>3.0–11.2</td></tr>
+<tr><td class="l">McLaren</td><td>316</td><td>13.0%</td><td>9.7–17.1</td><td class="l">Williams</td><td>134</td><td>5.2%</td><td>2.6–10.4</td></tr>
+<tr><td class="l">…</td><td></td><td></td><td></td><td class="l">…</td><td></td><td></td><td></td></tr>
+<tr><td class="l">Force India → Racing Point → Aston Martin</td><td>317</td><td>6.0%</td><td>3.9–9.2</td><td class="l">McLaren</td><td>136</td><td>3.7%</td><td>1.6–8.3</td></tr>
+<tr><td class="l">Ferrari</td><td>318</td><td>4.7%</td><td>2.9–7.6</td><td class="l">Red Bull</td><td>136</td><td>3.7%</td><td>1.6–8.3</td></tr>
+<tr><td class="l">Mercedes</td><td>320</td><td>3.8%</td><td>2.2–6.4</td><td class="l">Force India → Racing Point → Aston Martin</td><td>134</td><td>3.7%</td><td>1.6–8.4</td></tr>
+</table>
+<p class="cap"><b>Table 2.4</b> Highest and lowest strict rates per period (full tables with broad rates: notebook §5.3).</p>
+<div class="box"><b>Answer.</b>
+<ul>
+<li><b>2014–2021.</b> Caterham (21.2%, only 33 starts), Toro Rosso → AlphaTauri → RB (14.4%), Lotus F1 → Renault → Alpine (13.2%) and McLaren (13.0%) had the highest mechanical-retirement rates. Mercedes, the dominant team, was the lowest (3.8%). Teams clearly differ (p &lt; 0.001).</li>
+<li><b>2022–2024.</b> Lotus F1 → Renault → Alpine (10.4%) and Sauber ↔ Alfa Romeo (8.8%) are highest, but differences between teams are <b>not significant</b> (p = 0.18) and the intervals overlap, so this order is weak evidence.</li>
+<li><b>Change between the periods.</b> Failures became rarer overall (8.9% → 5.5%) and for almost every lineage. McLaren (13.0% → 3.7%), Red Bull (10.7% → 3.7%) and Toro Rosso → AlphaTauri → RB (14.4% → 5.9%) improved most; only Sauber ↔ Alfa Romeo (7.8% → 8.8%) and Mercedes (3.8% → 4.4%) rose slightly. For the 10 lineages present in both periods the rank correlation is +0.27 (p = 0.45): no evidence that the same teams stay the least reliable.</li>
+<li><b>Why lineage matters.</b> Grouped by <code>constructorId</code>, "Alpine 2014–2021" was a single season and "RB 2022–2024" only 2024, and the cross-period correlation came out −0.49 because identities were mixed.</li>
+<li><b>Robustness.</b> The broad rate keeps the same top four in 2014–2021 and the same top three in 2022–2024.</li>
+</ul></div>
+<p class="grain"><b>Grain / missingness / cutoff.</b> One row per car that took the start, aggregated per lineage and period; status has no missing values. Status is post-race information: it is used only in this analysis, never as a feature for the current race. A team's past reliability is a legal feature when computed from earlier races only (<code>con_mech_rate_last10</code>).</p>

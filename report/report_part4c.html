@@ -1,0 +1,16 @@
+<h2>4.7 Strengths and limitations</h2>
+<table>
+<tr><th>model</th><th>strengths</th><th>limitations</th></tr>
+<tr><td>logistic regression</td><td>simple, fast, deterministic; readable weights; well-calibrated probabilities</td><td>each feature moves the log-odds along a straight line; interactions (e.g. "pole matters more at Monaco") must be built by hand</td></tr>
+<tr><td>random forest</td><td>non-linear effects and interactions; robust to outliers and unscaled inputs</td><td>large; in-sample score above out-of-bag (0.599 vs 0.573); moves with the seed</td></tr>
+<tr><td>gradient boosting</td><td>usually strong on tabular data; handles interactions</td><td>many hyperparameters; overfits with fast learning and complex trees (default: 0.765 train vs 0.724 validation); tuning on 39 races is noisy; under-confident once tuned</td></tr>
+<tr><td>shallow network</td><td>can approximate smooth non-linear functions</td><td>needs scaling and regularisation; moves with the seed; harder to explain; no advantage on ~22,000 tabular rows</td></tr>
+</table>
+<p class="cap"><b>Table 4.8</b> Strengths and limitations per model.</p>
+<p><b>Limitations shared by all models.</b></p>
+<ul>
+<li><b>Each driver is scored independently.</b> Nothing forces exactly three podiums per race, so the yes/no output predicts 3–5 per race. A race-level model such as Plackett–Luce or a conditional logit (Henderson &amp; Kirrane, 2018) would solve this; it is out of scope here.</li>
+<li><b>No race-day information.</b> There is no weather, tyre strategy, safety car, crash or breakdown data, so upsets cannot be foreseen (Section 5.4).</li>
+<li><b>Small evaluation sets.</b> Validation has 39 races, so model and threshold choices carry noise, and validation scores are slightly optimistic because validation was used for several choices. Test has 68 races, and its intervals are about ±0.06 wide.</li>
+<li><b>Era shift.</b> The test seasons started a new set of technical rules, and the models still transfer to them. A future rule change may not behave the same way.</li>
+</ul>

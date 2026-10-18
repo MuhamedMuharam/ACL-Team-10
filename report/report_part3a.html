@@ -1,0 +1,31 @@
+<h1>3. Features, split and preprocessing</h1>
+
+<h2>3.1 Selected features, and why each is valid at the pre-race cutoff</h2>
+<p>We built <b>21 candidate features</b> in five groups and evaluated each in the EDA (Section 3.3). The models use the <b>18</b> that show a signal; the three with none (<code>pit_lane_start</code>, <code>home_race</code>, <code>field_size</code>) are not model inputs (D30), and Section 4.6 checks that adding them back never helps. The groups are reused by the ablation. Every feature is known after qualifying and before the start.</p>
+<table>
+<tr><th>group</th><th>feature</th><th>definition</th><th>why it is known before the start</th></tr>
+<tr><td rowspan="2">grid</td><td><code>grid_pos</code></td><td>starting slot after penalties, re-ranked among the cars on the grid (pit-lane start = last slot, D7)</td><td rowspan="2">the starting grid is fixed after qualifying and penalties</td></tr>
+<tr><td><code>grid_pct</code></td><td>(slot − 1) ÷ (field size − 1): 0 = pole, 1 = last</td></tr>
+<tr><td rowspan="3">qualifying</td><td><code>quali_position</code></td><td>qualifying classification</td><td rowspan="3">qualifying runs before the race; on 2021–22 sprint weekends the sprint, also before the race, sets the reference</td></tr>
+<tr><td><code>quali_gap_pct</code></td><td>the driver's Q1 lap vs the fastest Q1 lap of that race, in % (laps &gt; 20% off are not real attempts and become missing: 10 of 10,338)</td></tr>
+<tr><td><code>grid_penalty</code></td><td>grid slot − qualifying position (on 2021–22 sprint weekends: − sprint result)</td></tr>
+<tr><td rowspan="3">standings</td><td><code>drv_pts_share_before</code>, <code>con_pts_share_before</code></td><td>championship points ÷ the leader's points</td><td rowspan="3">taken from the table published after the previous race of the season (season opener: the previous season's final table), never from the current race</td></tr>
+<tr><td><code>drv_rank_before</code>, <code>con_rank_before</code></td><td>championship position</td></tr>
+<tr><td><code>drv_win_share_before</code>, <code>con_win_share_before</code></td><td>wins ÷ races run so far in the season</td></tr>
+<tr><td rowspan="5">form</td><td><code>drv_podium_rate_last5</code></td><td>share of the driver's previous 5 races on the podium</td><td rowspan="5">rolling windows over earlier races only: <code>shift(1)</code> before <code>rolling()</code>, in date order; the team is collapsed to one row per race first, so a team-mate's current result never leaks in</td></tr>
+<tr><td><code>drv_avg_finish_last5</code></td><td>average finishing position as a fraction of the field, previous 5 races</td></tr>
+<tr><td><code>con_podium_rate_last5</code></td><td>same as the driver version, for the team (both cars)</td></tr>
+<tr><td><code>con_avg_finish_last5</code></td><td>same as the driver version, for the team (both cars)</td></tr>
+<tr><td><code>con_mech_rate_last10</code></td><td>share of the team's cars with a mechanical failure, previous 10 races</td></tr>
+<tr><td rowspan="2">context</td><td><code>driver_age</code></td><td>age at the race date</td><td rowspan="2">date of birth and the number of earlier races are known beforehand</td></tr>
+<tr><td><code>experience</code></td><td>number of previous races on the grid</td></tr>
+</table>
+<p class="cap"><b>Table 3.1</b> The 18 model features (D13–D16, D30). Shares and ranks are used instead of raw points because points systems (8, 9, 10, 25 for a win) and season lengths (7–24 races) changed. Raw lap times are not used, because they partly measure track length (Monaco ≈ 70 s, Spa ≈ 105 s); a gap inside one race normalises circuit, season and weather at once, like the FIA's 107% rule (D15). Same-weekend sprint results are not used, because sprints are absent from every training season (D12). <code>field_size</code> remains an input of the inference function, because <code>grid_pct</code> is computed from it.</p>
+
+<h2>3.2 Leakage controls</h2>
+<ul>
+<li><b>Standings from before the race.</b> At the 2023 Belgian GP, Verstappen's standings row says 314 points, which already includes that race. The feature uses the 281 he had before it. An assertion checks that every <code>prev_raceId</code> lies strictly earlier in time than its race.</li>
+<li><b>Form from past races only.</b> <code>shift(1)</code> keeps the current race out of its own window, and races are ordered by date, not by <code>raceId</code>. A hand check recomputes Verstappen's podium rate over the 5 races before race 989 from the raw rows (0.40 = feature, asserted).</li>
+<li><b>No post-race column in the features.</b> An assertion checks every candidate feature against all post-race columns: <code>positionOrder</code>, points, laps, status, finishing rank, mechanical flag, and the rest.</li>
+<li><b>Choices on training data only.</b> Feature evidence, the 20% gap cutoff and every preprocessing statistic come from the training seasons.</li>
+</ul>
