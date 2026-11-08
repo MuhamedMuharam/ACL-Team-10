@@ -8,13 +8,22 @@
 
 ## Run
 
-```bash
-pip install neo4j
-# copy the 9 CSVs from ../data into this folder (they are git-ignored)
-python create_kg.py
-```
-
-Local Neo4j for testing: `docker run -d --name acl-neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/your_password neo4j:5`
+1. Go to https://console.neo4j.io, click **Create instance** and choose **Free**.
+2. Click **Download and continue** to save the credentials file. The password is shown only once.
+3. Fill in `config.txt` from that file:
+   ```
+   URI=<NEO4J_URI from the file>        e.g. neo4j+s://xxxxxxxx.databases.neo4j.io
+   USERNAME=<NEO4J_USERNAME from the file>
+   PASSWORD=<NEO4J_PASSWORD from the file>
+   ```
+4. Copy the 9 CSVs into this folder (they are git-ignored).
+5. Install the driver and build the graph:
+   ```bash
+   pip install neo4j
+   python create_kg.py
+   ```
+   The last line should read `51113 nodes, 163510 relationships`. Running it again must give the same counts.
+6. In the Aura console, open the instance, go to **Query**, and run the queries from `queries.txt`.
 
 ## Design notes
 
