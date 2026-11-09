@@ -71,8 +71,18 @@ def build(row, spec):
     return props
 
 
+def find_file(name):
+    """The CSVs and config.txt sit next to this script; fall back to the
+    current working directory if they are not there."""
+    for folder in (HERE, os.getcwd()):
+        path = os.path.join(folder, name)
+        if os.path.exists(path):
+            return path
+    raise FileNotFoundError(f"{name} not found next to create_kg.py or in {os.getcwd()}")
+
+
 def read_csv(name):
-    with open(os.path.join(HERE, name), encoding="utf-8", newline="") as f:
+    with open(find_file(name), encoding="utf-8", newline="") as f:
         return list(csv.DictReader(f))
 
 
@@ -164,10 +174,29 @@ CONSTRAINTS = [
 # ----------------------------------------------------------------------------
 # Neo4j helpers
 # ----------------------------------------------------------------------------
+def run(driver, database, query, **params):
+    """Run one auto-commit query and return its records as dicts.
+
+    Uses driver.session()/session.run(), which exist in every 4.x and 5.x
+    version of the Neo4j Python driver (driver.execute_query needs >= 5.5)."""
+    with driver.session(database=database) as session:
+        return session.run(query, **params).data()
+
+
 def run_batches(driver, database, query, rows):
     for start in range(0, len(rows), BATCH_SIZE):
-        batch = rows[start:start + BATCH_SIZE]
-        driver.execute_query(query, rows=batch, database_=database)
+        run(driver, database, query, rows=rows[start:start + BATCH_SIZE])
+
+
+def create_constraint(driver, database, label, key):
+    try:  # Neo4j 4.4 and 5.x syntax
+        run(driver, database,
+            f"CREATE CONSTRAINT {label.lower()}_{key.lower()}_unique IF NOT EXISTS "
+            f"FOR (n:{label}) REQUIRE n.{key} IS UNIQUE")
+    except Exception:  # older Neo4j 4.x syntax
+        run(driver, database,
+            f"CREATE CONSTRAINT {label.lower()}_{key.lower()}_unique IF NOT EXISTS "
+            f"ON (n:{label}) ASSERT n.{key} IS UNIQUE")
 
 
 def merge_nodes(driver, database, label, key, rows):
@@ -204,7 +233,7 @@ def links(rows, from_col, to_col):
 # Main
 # ----------------------------------------------------------------------------
 def main():
-    config = read_config(os.path.join(HERE, "config.txt"))
+    config = read_config(find_file("config.txt"))
     # No database name is hardcoded: use DATABASE from config.txt if it is
     # there, otherwise the server's default database.
     database = config.get("DATABASE") or None
@@ -223,17 +252,14 @@ def main():
     for r in pit_stops:
         r["eventId"] = f"{int(r['raceId'])}:{int(r['driverId'])}:{int(r['stop'])}"
 
-    with GraphDatabase.driver(config["URI"],
-                              auth=(config["USERNAME"], config["PASSWORD"])) as driver:
+    driver = GraphDatabase.driver(config["URI"],
+                                  auth=(config["USERNAME"], config["PASSWORD"]))
+    try:
         driver.verify_connectivity()
 
         print("Constraints")
         for label, key in CONSTRAINTS:
-            driver.execute_query(
-                f"CREATE CONSTRAINT {label.lower()}_{key.lower()}_unique IF NOT EXISTS "
-                f"FOR (n:{label}) REQUIRE n.{key} IS UNIQUE",
-                database_=database,
-            )
+            create_constraint(driver, database, label, key)
 
         # 1. Parent (entity) nodes first
         print("Entity nodes")
@@ -289,12 +315,12 @@ def main():
                    pit_links("driverId"))
 
         # Summary
-        nodes = driver.execute_query("MATCH (n) RETURN count(n) AS c",
-                                     database_=database).records[0]["c"]
-        rels = driver.execute_query("MATCH ()-[r]->() RETURN count(r) AS c",
-                                    database_=database).records[0]["c"]
+        nodes = run(driver, database, "MATCH (n) RETURN count(n) AS c")[0]["c"]
+        rels = run(driver, database, "MATCH ()-[r]->() RETURN count(r) AS c")[0]["c"]
         print(f"Done: {nodes} nodes, {rels} relationships "
               f"(expected 51113 nodes, 163510 relationships)")
+    finally:
+        driver.close()
 
 
 if __name__ == "__main__":
